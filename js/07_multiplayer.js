@@ -51,6 +51,9 @@ function applyAuthState(state) {
   if (typeof state.currentPlayerIndex === "number") {
     currentPlayerIndex = state.currentPlayerIndex;
   }
+  if (typeof state.turnCounter === "number") {
+    turnCounter = state.turnCounter;
+  }
   if (typeof state.movesRemaining === "number") {
     movesRemaining = state.movesRemaining;
   }
@@ -81,6 +84,9 @@ function applyAuthState(state) {
   }
   updatePawns();
   updateTurnUI();
+  if (typeof updateStatusPanel === "function") {
+    updateStatusPanel();
+  }
   if (typeof canLocalAct === "function" && canLocalAct() && movesRemaining > 0) {
     showReachable();
   } else {

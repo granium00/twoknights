@@ -81,9 +81,11 @@ function applyAuthoritativeAction(state, action) {
       if (state.movesRemaining <= 0) return state;
       const player = state.players[action.playerIndex];
       if (!player) return state;
+      const dist = Math.abs(player.x - action.x) + Math.abs(player.y - action.y);
+      if (dist > state.movesRemaining) return state;
       player.x = action.x;
       player.y = action.y;
-      state.movesRemaining = Math.max(0, state.movesRemaining - 1);
+      state.movesRemaining = 0;
       state.tick += 1;
       return state;
     }
