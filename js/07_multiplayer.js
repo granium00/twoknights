@@ -737,6 +737,9 @@ function applyState(state) {
   Object.assign(castleOwnersByKey, state.castleOwnersByKey || {});
   Object.keys(castleStatsByKey).forEach(key => delete castleStatsByKey[key]);
   Object.assign(castleStatsByKey, state.castleStatsByKey || {});
+  if (typeof syncCastleOwnershipVisuals === "function") {
+    syncCastleOwnershipVisuals();
+  }
 
   // Guard access
   if (Array.isArray(state.guardAccess)) {

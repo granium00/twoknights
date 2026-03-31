@@ -146,6 +146,28 @@ function canSeePlayerCastleStats(targetIndex) {
   if (!localPlayer || !castleKey) return false;
   return getCastleDistanceToPlayer(castleKey, localPlayer) <= 6;
 }
+
+function syncCastleOwnershipVisuals() {
+  if (typeof importantNodes === "undefined" || !Array.isArray(importantNodes)) return;
+  importantNodes.forEach(node => {
+    if (!node || node.type !== "castle") return;
+    const key = `${node.x},${node.y}`;
+    const owner = castleOwnersByKey[key];
+    if (!node.elem) return;
+    if (typeof owner === "number" && players[owner]) {
+      node.elem.classList.add("owned");
+      node.elem.style.background = players[owner].color;
+      node.elem.style.borderColor = players[owner].color;
+    } else {
+      node.elem.classList.remove("owned");
+      node.elem.style.background = "";
+      node.elem.style.borderColor = "";
+    }
+    if (typeof updateCastleBadge === "function") {
+      updateCastleBadge(key);
+    }
+  });
+}
 const pawns = players.map((player, index) => {
   const pawn = document.createElement("div");
   pawn.className = "pawn";
