@@ -12,6 +12,9 @@ let pendingState = null;
 let applyStateTimer = null;
 const STATE_APPLY_DEBOUNCE_MS = 40;
 let lastBoardFingerprint = "";
+let lastReachableFingerprint = "";
+let lastPlayerUiFingerprint = [];
+let lastPawnPositions = [];
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
 
@@ -551,15 +554,53 @@ function applyState(state) {
   }
 
   // Reachable
-  clearReachable();
-  reachableKeys = new Set(state.reachableKeys || []);
-  showReachable();
+  const reachableList = Array.isArray(state.reachableKeys) ? state.reachableKeys.slice().sort() : [];
+  const reachableFingerprint = reachableList.join("|");
+  if (reachableFingerprint !== lastReachableFingerprint) {
+    lastReachableFingerprint = reachableFingerprint;
+    clearReachable();
+    reachableKeys = new Set(reachableList);
+    showReachable();
+  }
 
   // UI updates
-  updatePawns();
-  players.forEach((_, idx) => {
-    updatePlayerResources(idx);
-    updateInventory(idx);
+  const positions = players.map(p => `${p.x},${p.y}`).join("|");
+  if (positions !== lastPawnPositions.join("|")) {
+    lastPawnPositions = players.map(p => `${p.x},${p.y}`);
+    updatePawns();
+  }
+  players.forEach((player, idx) => {
+    const uiFingerprint = JSON.stringify({
+      resources: player.resources,
+      pocket: player.pocket,
+      income: player.income,
+      attack: player.attack,
+      barbarianKills: player.barbarianKills,
+      slow: player.slowTurnsRemaining,
+      noDouble: player.noDoubleTurnsRemaining,
+      invis: player.invisTurnsRemaining,
+      luck: player.luckTurnsRemaining,
+      stone: player.stoneBonusRollsRemaining,
+      stunned: player.stunnedTurnsRemaining,
+      poisonCount: player.poisonCount,
+      invisPotionCount: player.invisPotionCount,
+      luckPotionCount: player.luckPotionCount,
+      cloverCount: player.cloverCount,
+      trollClubCount: player.trollClubCount,
+      flowerCount: player.flowerCount,
+      tokenCount: player.tokenCount,
+      ringCount: player.ringCount,
+      terrorRingCount: player.terrorRingCount,
+      rainbowStoneCount: player.rainbowStoneCount,
+      heroHiltCount: player.heroHiltCount,
+      hasSword: player.hasSword,
+      hasArmor: player.hasArmor,
+      hasWorkshopSword: player.hasWorkshopSword
+    });
+    if (lastPlayerUiFingerprint[idx] !== uiFingerprint) {
+      lastPlayerUiFingerprint[idx] = uiFingerprint;
+      updatePlayerResources(idx);
+    }
   });
   updateTurnUI();
   updateStatusPanel();
