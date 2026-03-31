@@ -19,6 +19,7 @@ let lastFullStateAt = 0;
 let lastSentState = null;
 let lastSentTurnIndex = null;
 const FULL_STATE_INTERVAL = 1000;
+let hasInitialFullBoard = false;
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
 
@@ -767,8 +768,9 @@ function applyState(state) {
     thieves: normalizeEntries(state.thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`)
   });
   const boardChanged = boardFingerprint !== lastBoardFingerprint;
-  if (boardChanged) {
+  if (boardChanged && !hasInitialFullBoard) {
     lastBoardFingerprint = boardFingerprint;
+    hasInitialFullBoard = true;
 
     // Clear and rebuild board
     resetDynamicCells();
