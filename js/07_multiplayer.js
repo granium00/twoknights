@@ -17,7 +17,8 @@ let lastPlayerUiFingerprint = [];
 let lastPawnPositions = [];
 let lastFullStateAt = 0;
 let lastSentState = null;
-const FULL_STATE_INTERVAL = 5000;
+let lastSentTurnIndex = null;
+const FULL_STATE_INTERVAL = 1000;
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
 
@@ -486,9 +487,11 @@ function emitStateNow(force = false) {
   if (!force && fingerprint === lastStateFingerprint) return;
   lastStateFingerprint = fingerprint;
   lastEmitAt = now;
-  const shouldSendFull = force || !lastSentState || (now - lastFullStateAt > FULL_STATE_INTERVAL);
+  const turnChanged = lastSentTurnIndex !== state.currentPlayerIndex;
+  const shouldSendFull = force || turnChanged || !lastSentState || (now - lastFullStateAt > FULL_STATE_INTERVAL);
   if (shouldSendFull) {
     lastFullStateAt = now;
+    lastSentTurnIndex = state.currentPlayerIndex;
     lastSentState = shallowClone(state);
     socket.emit("hostState", state);
     return;
