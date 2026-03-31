@@ -7,6 +7,7 @@ const RESOURCE_TYPES = {
   army: { min: 5, max: 8, label: "войск" },
   resources: { min: 20, max: 30, label: "ресурсов" }
 };
+const RESOURCE_LIFETIME_TURNS = 6;
 
 const DEFAULT_STATE = {
   version: 1,
@@ -41,6 +42,20 @@ function createAuthoritativeState() {
 function applyAuthoritativeAction(state, action) {
   const events = [];
   if (!action || typeof action.type !== "string") return { state, events };
+  function pruneExpiredResources() {
+    const toRemove = [];
+    state.resourceByPos = state.resourceByPos.filter(entry => {
+      if (typeof entry.spawnedAtTurn !== "number") return true;
+      if ((state.turnCounter - entry.spawnedAtTurn) >= RESOURCE_LIFETIME_TURNS) {
+        toRemove.push(entry.key);
+        return false;
+      }
+      return true;
+    });
+    if (toRemove.length) {
+      events.push({ type: "despawn", kind: "resources", keys: toRemove });
+    }
+  }
   switch (action.type) {
     case "bootstrap": {
       if (!action.state) return { state, events };
@@ -93,7 +108,8 @@ function applyAuthoritativeAction(state, action) {
           key: entry.key,
           x: entry.x,
           y: entry.y,
-          typeKey: entry.typeKey
+          typeKey: entry.typeKey,
+          spawnedAtTurn: entry.spawnedAtTurn
         }));
       }
       if (typeof next.turnsUntilResources === "number") {
@@ -177,10 +193,12 @@ function applyAuthoritativeAction(state, action) {
         state.rainbowByPos.splice(rainbowIndex, 1);
         events.push({ type: "pickup", kind: "rainbow", key, playerIndex: action.playerIndex });
       }
-      if (events.length === 0) {
+      const hasBlocking = events.some(evt => evt.blockTurn);
+      if (!hasBlocking) {
         state.movesRemaining = 0;
         state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
         state.turnCounter += 1;
+        pruneExpiredResources();
         state.turnsUntilResources = Math.max(0, state.turnsUntilResources - 1);
         if (state.turnsUntilResources === 0) {
           const spawnPool = Array.isArray(state.spawnableKeys) ? state.spawnableKeys.slice() : [];
@@ -200,7 +218,7 @@ function applyAuthoritativeAction(state, action) {
             const pickIndex = Math.floor(Math.random() * emptyKeys.length);
             const spawnKey = emptyKeys.splice(pickIndex, 1)[0];
             const [sx, sy] = spawnKey.split(",").map(Number);
-            state.resourceByPos.push({ key: spawnKey, x: sx, y: sy, typeKey });
+            state.resourceByPos.push({ key: spawnKey, x: sx, y: sy, typeKey, spawnedAtTurn: state.turnCounter });
             spawned.push({ key: spawnKey, x: sx, y: sy, typeKey });
           }
           if (spawned.length) {
@@ -220,6 +238,7 @@ function applyAuthoritativeAction(state, action) {
       state.movesRemaining = 0;
       state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
       state.turnCounter += 1;
+      pruneExpiredResources();
       state.turnsUntilResources = Math.max(0, state.turnsUntilResources - 1);
       if (state.turnsUntilResources === 0) {
         const spawnPool = Array.isArray(state.spawnableKeys) ? state.spawnableKeys.slice() : [];
@@ -239,7 +258,7 @@ function applyAuthoritativeAction(state, action) {
           const pickIndex = Math.floor(Math.random() * emptyKeys.length);
           const spawnKey = emptyKeys.splice(pickIndex, 1)[0];
           const [sx, sy] = spawnKey.split(",").map(Number);
-          state.resourceByPos.push({ key: spawnKey, x: sx, y: sy, typeKey });
+          state.resourceByPos.push({ key: spawnKey, x: sx, y: sy, typeKey, spawnedAtTurn: state.turnCounter });
           spawned.push({ key: spawnKey, x: sx, y: sy, typeKey });
         }
         if (spawned.length) {

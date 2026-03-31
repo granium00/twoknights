@@ -53,7 +53,8 @@ function emitAuthBootstrap() {
       key: entry.key,
       x: entry.x,
       y: entry.y,
-      typeKey: entry.type?.key || entry.typeKey
+      typeKey: entry.type?.key || entry.typeKey,
+      spawnedAtTurn: entry.spawnedAtTurn
     })),
     treasure: treasure ? { key: treasure.key, x: treasure.x, y: treasure.y } : null,
     flowerArtifact: flowerArtifact ? { key: flowerArtifact.key, x: flowerArtifact.x, y: flowerArtifact.y } : null,
@@ -1318,6 +1319,21 @@ if (socket) {
         Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
       }
       evt.items.forEach(entry => applyResourceEntry(entry));
+      if (typeof updateStatusPanel === "function") {
+        updateStatusPanel();
+      }
+    }
+    if (evt.type === "despawn" && evt.kind === "resources" && Array.isArray(evt.keys)) {
+      evt.keys.forEach(key => {
+        const entry = resourceByPos[key];
+        if (entry) {
+          delete resourceByPos[key];
+          setCellToInactive(entry.x, entry.y);
+        } else if (key) {
+          const parts = key.split(",").map(Number);
+          if (parts.length === 2) setCellToInactive(parts[0], parts[1]);
+        }
+      });
       if (typeof updateStatusPanel === "function") {
         updateStatusPanel();
       }
