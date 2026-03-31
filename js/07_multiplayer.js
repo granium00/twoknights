@@ -770,20 +770,27 @@ function applyState(state) {
   if (typeof turnEndPending !== "undefined") {
     turnEndPending = false;
   }
+  const authActive = typeof lastAuthState !== "undefined" &&
+    lastAuthState &&
+    typeof lastAuthState.currentPlayerIndex === "number";
 
   // Scalars
-  currentPlayerIndex = state.currentPlayerIndex ?? currentPlayerIndex;
-  movesRemaining = state.movesRemaining ?? movesRemaining;
-  lastRoll = state.lastRoll ?? lastRoll;
-  lastRollText = state.lastRollText ?? lastRollText;
-  lastDie1 = state.lastDie1 ?? lastDie1;
-  lastDie2 = state.lastDie2 ?? lastDie2;
+  if (!authActive) {
+    currentPlayerIndex = state.currentPlayerIndex ?? currentPlayerIndex;
+    movesRemaining = state.movesRemaining ?? movesRemaining;
+    lastRoll = state.lastRoll ?? lastRoll;
+    lastRollText = state.lastRollText ?? lastRollText;
+    lastDie1 = state.lastDie1 ?? lastDie1;
+    lastDie2 = state.lastDie2 ?? lastDie2;
+  }
   extraTurnPending = state.extraTurnPending ?? extraTurnPending;
   extraTurnReason = state.extraTurnReason ?? extraTurnReason;
   justRolledDouble = state.justRolledDouble ?? justRolledDouble;
   robberAmbushThisSession = state.robberAmbushThisSession ?? robberAmbushThisSession;
   robbersEnabled = state.robbersEnabled ?? robbersEnabled;
-  turnCounter = state.turnCounter ?? turnCounter;
+  if (!authActive) {
+    turnCounter = state.turnCounter ?? turnCounter;
+  }
   turnsUntilResources = state.turnsUntilResources ?? turnsUntilResources;
   turnsUntilTreasure = state.turnsUntilTreasure ?? turnsUntilTreasure;
   treasureTurnsRemaining = state.treasureTurnsRemaining ?? treasureTurnsRemaining;
@@ -803,6 +810,13 @@ function applyState(state) {
     if (!players[idx]) return;
     Object.assign(players[idx], data);
   });
+  if (authActive && Array.isArray(lastAuthState?.players)) {
+    lastAuthState.players.forEach((p, idx) => {
+      if (!players[idx]) return;
+      if (typeof p.x === "number") players[idx].x = p.x;
+      if (typeof p.y === "number") players[idx].y = p.y;
+    });
+  }
 
   // Castle maps
   Object.keys(castleOwnersByKey).forEach(key => delete castleOwnersByKey[key]);
@@ -961,23 +975,28 @@ function applyState(state) {
   }
 
   // Reachable
-  const shouldShowReachable = (state.movesRemaining ?? movesRemaining) > 0;
-  const reachableList = shouldShowReachable && Array.isArray(state.reachableKeys)
-    ? state.reachableKeys.slice().sort()
-    : [];
-  const reachableFingerprint = reachableList.join("|");
-  if (reachableFingerprint !== lastReachableFingerprint) {
-    lastReachableFingerprint = reachableFingerprint;
-    clearReachable();
-    reachableKeys = new Set(reachableList);
-    if (shouldShowReachable && typeof canLocalAct === "function" && canLocalAct()) {
-      showReachable();
+  if (!authActive) {
+    const shouldShowReachable = (state.movesRemaining ?? movesRemaining) > 0;
+    const reachableList = shouldShowReachable && Array.isArray(state.reachableKeys)
+      ? state.reachableKeys.slice().sort()
+      : [];
+    const reachableFingerprint = reachableList.join("|");
+    if (reachableFingerprint !== lastReachableFingerprint) {
+      lastReachableFingerprint = reachableFingerprint;
+      clearReachable();
+      reachableKeys = new Set(reachableList);
+      if (shouldShowReachable && typeof canLocalAct === "function" && canLocalAct()) {
+        showReachable();
+      }
     }
   }
 
   // UI updates
   const positions = players.map(p => `${p.x},${p.y}`).join("|");
-  if (positions !== lastPawnPositions.join("|")) {
+  if (authActive) {
+    lastPawnPositions = [];
+    updatePawns();
+  } else if (positions !== lastPawnPositions.join("|")) {
     lastPawnPositions = players.map(p => `${p.x},${p.y}`);
     updatePawns();
   }
