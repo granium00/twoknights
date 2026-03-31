@@ -111,6 +111,18 @@ io.on("connection", socket => {
   });
 
   socket.on("auth:action", action => {
+    if (!action || typeof action.type !== "string") return;
+    const claimedPlayer = action.playerIndex;
+    const assignedPlayer = playerAssignments.get(socket.id);
+    if (typeof claimedPlayer === "number" && typeof assignedPlayer === "number") {
+      if (claimedPlayer !== assignedPlayer) return;
+    }
+    if (typeof claimedPlayer === "number" &&
+      typeof authoritativeState.currentPlayerIndex === "number" &&
+      claimedPlayer !== authoritativeState.currentPlayerIndex &&
+      (action.type === "roll" || action.type === "move" || action.type === "end_turn")) {
+      return;
+    }
     authoritativeState = applyAuthoritativeAction(authoritativeState, action);
     io.emit("auth:state", authoritativeState);
   });
