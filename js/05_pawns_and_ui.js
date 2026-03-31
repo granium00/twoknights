@@ -3937,7 +3937,12 @@ function tryAutoRoll() {
   const inMultiplayer = typeof socket !== "undefined" && socket;
   if (inMultiplayer && !isHost) return;
   if (gameEnded) return;
-  if (movesRemaining > 0) return;
+  const authMoves = (typeof lastAuthState !== "undefined" &&
+    lastAuthState &&
+    typeof lastAuthState.movesRemaining === "number")
+    ? lastAuthState.movesRemaining
+    : movesRemaining;
+  if (authMoves > 0) return;
   if (processRobberAmbushChance()) return;
   doRoll();
 }

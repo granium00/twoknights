@@ -36,7 +36,19 @@ game.addEventListener("click", e => {
   if (authMovesRemaining <= 0) {
     return;
   }
-  if (!reachableKeys.has(key)) return;
+  if (!reachableKeys.has(key)) {
+    if (inMultiplayer && authTurnActive) {
+      if (typeof emitAuthAction === "function") {
+        emitAuthAction({
+          type: "move",
+          playerIndex: currentPlayerIndex,
+          x: gridX,
+          y: gridY
+        });
+      }
+    }
+    return;
+  }
   const mercenaryTarget = getMercenaryAtKey(key);
   if (mercenaryTarget) {
     if (inMultiplayer && authTurnActive) {
@@ -160,7 +172,19 @@ game.addEventListener("click", e => {
   }
 
   if (blockedCellKeys.has(key)) return;
-  if (!reachableKeys.has(key)) return;
+  if (!reachableKeys.has(key)) {
+    if (inMultiplayer && authTurnActive) {
+      if (typeof emitAuthAction === "function") {
+        emitAuthAction({
+          type: "move",
+          playerIndex: currentPlayerIndex,
+          x: gridX,
+          y: gridY
+        });
+      }
+    }
+    return;
+  }
 
   finalizeMove(gridX, gridY);
 });
