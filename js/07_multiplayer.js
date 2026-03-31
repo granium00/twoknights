@@ -8,6 +8,9 @@ let applyingRemoteState = false;
 let lastStateFingerprint = "";
 let lastEmitAt = 0;
 let performingRemoteAction = false;
+let pendingState = null;
+let applyStateTimer = null;
+const STATE_APPLY_DEBOUNCE_MS = 40;
 
 function shallowClone(obj) {
   return JSON.parse(JSON.stringify(obj));
@@ -506,6 +509,19 @@ function applyState(state) {
   applyingRemoteState = false;
 }
 
+function queueStateApply(state) {
+  pendingState = state;
+  if (applyStateTimer) return;
+  applyStateTimer = setTimeout(() => {
+    applyStateTimer = null;
+    if (pendingState) {
+      const nextState = pendingState;
+      pendingState = null;
+      applyState(nextState);
+    }
+  }, STATE_APPLY_DEBOUNCE_MS);
+}
+
 function getActionFromEvent(e) {
   const target = e.target;
   if (!target) return null;
@@ -616,7 +632,7 @@ if (socket) {
   socket.on("stateUpdate", state => {
     if (isHost) return;
     if (!state || applyingRemoteState) return;
-    applyState(state);
+    queueStateApply(state);
   });
 
   document.addEventListener("click", e => {
