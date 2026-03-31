@@ -14,6 +14,11 @@ game.addEventListener("click", e => {
 
   const key = `${gridX},${gridY}`;
   const currentPlayer = players[currentPlayerIndex];
+  const inMultiplayer = typeof socket !== "undefined" && socket;
+  const authTurnActive = inMultiplayer &&
+    typeof lastAuthState !== "undefined" &&
+    lastAuthState &&
+    typeof lastAuthState.currentPlayerIndex === "number";
   if (typeof tryBallistaShot === "function" && ballistaModePlayerIndex === currentPlayerIndex) {
     if (tryBallistaShot(gridX, gridY)) {
       return;
@@ -34,6 +39,17 @@ game.addEventListener("click", e => {
   if (!reachableKeys.has(key)) return;
   const mercenaryTarget = getMercenaryAtKey(key);
   if (mercenaryTarget) {
+    if (inMultiplayer && authTurnActive) {
+      if (typeof emitAuthAction === "function") {
+        emitAuthAction({
+          type: "move",
+          playerIndex: currentPlayerIndex,
+          x: gridX,
+          y: gridY
+        });
+      }
+      return;
+    }
     if (currentPlayer.pocket.army <= 0) {
       showPickupToast("В кармане нет войск для боя.");
       return;
