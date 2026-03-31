@@ -565,6 +565,7 @@ function applyResourceEntry(entry) {
 }
 
 function applySpecialEntry(entry) {
+  const key = entry.key || `${entry.x},${entry.y}`;
   const success = setSpecialCell(
     entry.x,
     entry.y,
@@ -576,8 +577,8 @@ function applySpecialEntry(entry) {
     entry.type ? { type: entry.type, mageId: entry.mageId } : {}
   );
   if (!success) return;
-  if (entry.disabled) setSpecialCellDisabled(entry.key, true);
-  const cell = grid[entry.key];
+  if (entry.disabled) setSpecialCellDisabled(key, true);
+  const cell = grid[key];
   if (!cell) return;
   if (entry.extraClass === "mage") {
     setCellIcon(cell, "mage.png", "Маг");
@@ -751,25 +752,49 @@ function applyState(state) {
     });
   }
 
-  const boardFingerprint = JSON.stringify({
-    resourceByPos: normalizeEntries(state.resourceByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.typeKey || ""}`),
-    specialByPos: normalizeEntries(state.specialByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.extraClass || ""}:${entry.type || ""}:${entry.ownerIndex ?? ""}`),
-    treasure: state.treasure ? `${state.treasure.key || `${state.treasure.x},${state.treasure.y}`}` : "",
-    flowerArtifact: state.flowerArtifact ? `${state.flowerArtifact.key || `${state.flowerArtifact.x},${state.flowerArtifact.y}`}` : "",
-    cloverArtifact: state.cloverArtifact ? `${state.cloverArtifact.key || `${state.cloverArtifact.x},${state.cloverArtifact.y}`}` : "",
-    stoneByPos: normalizeEntries(state.stoneByPos, entry => `${entry.key || `${entry.x},${entry.y}`}`),
-    rainbowByPos: normalizeEntries(state.rainbowByPos, entry => `${entry.key || `${entry.x},${entry.y}`}`),
-    portalState: state.portalState ? `${state.portalState.active ? 1 : 0}:${(state.portalState.keys || []).join("|")}` : "",
-    masterActive: state.masterActive ? 1 : 0,
-    mageSlot: state.mageSlot ? `${state.mageSlot.active ? 1 : 0}:${state.mageSlot.key || ""}` : "",
-    trollState: state.trollState ? `${state.trollState.key || ""}` : "",
-    barbarianCells: normalizeEntries(state.barbarianCells, entry => `${entry.key || `${entry.x},${entry.y}`}`),
-    mercenaries: normalizeEntries(state.mercenaries, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
-    thieves: normalizeEntries(state.thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`)
-  });
-  const boardChanged = boardFingerprint !== lastBoardFingerprint;
-  if (boardChanged && !hasInitialFullBoard) {
-    lastBoardFingerprint = boardFingerprint;
+  function buildBoardFingerprintFromState(data) {
+    return JSON.stringify({
+      resourceByPos: normalizeEntries(data.resourceByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.typeKey || ""}`),
+      specialByPos: normalizeEntries(data.specialByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.extraClass || ""}:${entry.type || ""}:${entry.ownerIndex ?? ""}`),
+      treasure: data.treasure ? `${data.treasure.key || `${data.treasure.x},${data.treasure.y}`}` : "",
+      flowerArtifact: data.flowerArtifact ? `${data.flowerArtifact.key || `${data.flowerArtifact.x},${data.flowerArtifact.y}`}` : "",
+      cloverArtifact: data.cloverArtifact ? `${data.cloverArtifact.key || `${data.cloverArtifact.x},${data.cloverArtifact.y}`}` : "",
+      stoneByPos: normalizeEntries(data.stoneByPos, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+      rainbowByPos: normalizeEntries(data.rainbowByPos, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+      portalState: data.portalState ? `${data.portalState.active ? 1 : 0}:${(data.portalState.keys || []).join("|")}` : "",
+      masterActive: data.masterActive ? 1 : 0,
+      mageSlot: data.mageSlot ? `${data.mageSlot.active ? 1 : 0}:${data.mageSlot.key || ""}` : "",
+      trollState: data.trollState ? `${data.trollState.key || ""}` : "",
+      barbarianCells: normalizeEntries(data.barbarianCells, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+      mercenaries: normalizeEntries(data.mercenaries, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
+      thieves: normalizeEntries(data.thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`)
+    });
+  }
+
+  function buildBoardFingerprintFromLocal() {
+    return JSON.stringify({
+      resourceByPos: normalizeEntries(Object.values(resourceByPos), entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.type?.key || entry.typeKey || ""}`),
+      specialByPos: normalizeEntries(Object.values(specialByPos), entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.extraClass || ""}:${entry.type || ""}:${entry.ownerIndex ?? ""}`),
+      treasure: treasure ? `${treasure.key || `${treasure.x},${treasure.y}`}` : "",
+      flowerArtifact: flowerArtifact ? `${flowerArtifact.key || `${flowerArtifact.x},${flowerArtifact.y}`}` : "",
+      cloverArtifact: cloverArtifact ? `${cloverArtifact.key || `${cloverArtifact.x},${cloverArtifact.y}`}` : "",
+      stoneByPos: normalizeEntries(Object.values(stoneByPos), entry => `${entry.key || `${entry.x},${entry.y}`}`),
+      rainbowByPos: normalizeEntries(Object.values(rainbowByPos), entry => `${entry.key || `${entry.x},${entry.y}`}`),
+      portalState: portalState ? `${portalState.active ? 1 : 0}:${(portalState.keys || []).join("|")}` : "",
+      masterActive: masterActive ? 1 : 0,
+      mageSlot: mageSlot ? `${mageSlot.active ? 1 : 0}:${mageSlot.key || ""}` : "",
+      trollState: trollState ? `${trollState.key || ""}` : "",
+      barbarianCells: normalizeEntries(barbarianCells, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+      mercenaries: normalizeEntries(mercenaries, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
+      thieves: normalizeEntries(thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`)
+    });
+  }
+
+  const incomingBoardFingerprint = buildBoardFingerprintFromState(state);
+  const localBoardFingerprint = buildBoardFingerprintFromLocal();
+  const needsBoardSync = !hasInitialFullBoard || localBoardFingerprint !== incomingBoardFingerprint;
+  if (needsBoardSync) {
+    lastBoardFingerprint = incomingBoardFingerprint;
     hasInitialFullBoard = true;
 
     // Clear and rebuild board
