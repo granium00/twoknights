@@ -3309,6 +3309,7 @@ let audioUnlocked = false;
 let testModeEnabled = false;
 let lastBattleResult = null;
 let lastBattleId = 0;
+let turnEndPending = false;
 
 function tickAllTimedBuffs() {
   players.forEach(player => {
@@ -3687,7 +3688,13 @@ function showBallistaRange() {
   }
 }
 
-function endTurn() {
+function endTurn(force = false) {
+  if (!force) {
+    turnEndPending = true;
+    updateTurnUI();
+    return;
+  }
+  turnEndPending = false;
   ballistaModePlayerIndex = null;
   tickAllTimedBuffs();
   collectCastleIncomes(currentPlayerIndex);
@@ -3869,7 +3876,7 @@ if (endTurnBtn) {
       clearReachable();
     }
     showPickupToast("Ход завершен.");
-    endTurn();
+    endTurn(true);
   });
 }
 function resetGameState() {

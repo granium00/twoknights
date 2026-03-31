@@ -376,6 +376,9 @@ function applyThief(entry) {
 
 function applyState(state) {
   applyingRemoteState = true;
+  if (typeof turnEndPending !== "undefined") {
+    turnEndPending = false;
+  }
 
   // Scalars
   currentPlayerIndex = state.currentPlayerIndex ?? currentPlayerIndex;

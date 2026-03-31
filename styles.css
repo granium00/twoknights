@@ -448,7 +448,26 @@ body.turn-locked .player-slot {
   pointer-events: none;
 }
 body.turn-locked #game {
-  opacity: 0.6;
+  opacity: 1;
+}
+
+body.turn-locked #barracksModal,
+body.turn-locked #lavkaModal,
+body.turn-locked #workshopModal,
+body.turn-locked #hireModal,
+body.turn-locked #repairModal,
+body.turn-locked #robberModal,
+body.turn-locked #battleModal,
+body.turn-locked #cityModal,
+body.turn-locked #mageModal,
+body.turn-locked #stoneModal,
+body.turn-locked #stoneResultModal,
+body.turn-locked #trollCaveModal,
+body.turn-locked #masterModal,
+body.turn-locked #castleModal,
+body.turn-locked #guardModal,
+body.turn-locked #gameOverModal {
+  display: none !important;
 }
 
 #playerSelectModal {
