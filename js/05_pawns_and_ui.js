@@ -374,7 +374,6 @@ function showPickupToast(text, options = {}) {
     if (typeof isHost !== "undefined" && isHost) {
       socket.emit("pickupToast", { text });
     }
-    return;
   }
   const localIndex = getLocalPlayerIndex();
   if (!wantsBroadcast && localIndex !== null && localIndex !== currentPlayerIndex) {

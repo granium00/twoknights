@@ -123,7 +123,7 @@ io.on("connection", socket => {
 
   socket.on("pickupToast", payload => {
     if (!payload || typeof payload.text !== "string") return;
-    io.emit("pickupToast", { text: payload.text });
+    io.emit("pickupToast", { text: payload.text, senderId: socket.id });
   });
 
   socket.on("requestPlayerIndex", index => {

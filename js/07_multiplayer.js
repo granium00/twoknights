@@ -43,6 +43,14 @@ function shallowClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
+function normalizeEntries(entries, keyFn) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map(entry => keyFn(entry))
+    .filter(Boolean)
+    .sort();
+}
+
 function buildState() {
   return {
     players: players.map(p => ({
@@ -435,25 +443,25 @@ function applyState(state) {
   }
 
   const boardFingerprint = JSON.stringify({
-    resourceByPos: state.resourceByPos || [],
-    specialByPos: state.specialByPos || [],
-    treasure: state.treasure || null,
-    flowerArtifact: state.flowerArtifact || null,
-    cloverArtifact: state.cloverArtifact || null,
-    cloverTurnsRemaining: state.cloverTurnsRemaining,
-    nextCloverSpawnTurn: state.nextCloverSpawnTurn,
-    stoneByPos: state.stoneByPos || [],
-    rainbowByPos: state.rainbowByPos || [],
-    portalState: state.portalState || null,
-    masterActive: state.masterActive,
-    mageSlot: state.mageSlot || null,
-    trollState: state.trollState || null,
-    barbarianCells: state.barbarianCells || [],
-    barbarianRespawnTimers: state.barbarianRespawnTimers || [],
-    mercenaries: state.mercenaries || [],
-    mercenaryIdCounter: state.mercenaryIdCounter,
-    thieves: state.thieves || [],
-    thiefIdCounter: state.thiefIdCounter
+    resourceByPos: normalizeEntries(state.resourceByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.typeKey || ""}`),
+    specialByPos: normalizeEntries(state.specialByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.extraClass || ""}:${entry.type || ""}:${entry.ownerIndex ?? ""}`),
+    treasure: state.treasure ? `${state.treasure.key || `${state.treasure.x},${state.treasure.y}`}` : "",
+    flowerArtifact: state.flowerArtifact ? `${state.flowerArtifact.key || `${state.flowerArtifact.x},${state.flowerArtifact.y}`}` : "",
+    cloverArtifact: state.cloverArtifact ? `${state.cloverArtifact.key || `${state.cloverArtifact.x},${state.cloverArtifact.y}`}` : "",
+    cloverTurnsRemaining: state.cloverTurnsRemaining ?? "",
+    nextCloverSpawnTurn: state.nextCloverSpawnTurn ?? "",
+    stoneByPos: normalizeEntries(state.stoneByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.turnsRemaining ?? ""}`),
+    rainbowByPos: normalizeEntries(state.rainbowByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.turnsRemaining ?? ""}`),
+    portalState: state.portalState ? `${state.portalState.active ? 1 : 0}:${(state.portalState.keys || []).join("|")}:${state.portalState.turnsRemaining ?? ""}:${state.portalState.nextSpawnTurn ?? ""}` : "",
+    masterActive: state.masterActive ? 1 : 0,
+    mageSlot: state.mageSlot ? `${state.mageSlot.active ? 1 : 0}:${state.mageSlot.key || ""}:${state.mageSlot.turnsRemaining ?? ""}` : "",
+    trollState: state.trollState ? `${state.trollState.key || ""}:${state.trollState.turnsRemaining ?? ""}:${state.trollState.moving ? 1 : 0}` : "",
+    barbarianCells: normalizeEntries(state.barbarianCells, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+    barbarianRespawnTimers: normalizeEntries(state.barbarianRespawnTimers, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.turnsRemaining ?? ""}`),
+    mercenaries: normalizeEntries(state.mercenaries, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
+    mercenaryIdCounter: state.mercenaryIdCounter ?? "",
+    thieves: normalizeEntries(state.thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
+    thiefIdCounter: state.thiefIdCounter ?? ""
   });
   const boardChanged = boardFingerprint !== lastBoardFingerprint;
   if (boardChanged) {
@@ -710,6 +718,7 @@ if (socket) {
 
   socket.on("pickupToast", payload => {
     if (!payload || typeof payload.text !== "string") return;
+    if (payload.senderId && socket.id && payload.senderId === socket.id) return;
     if (typeof showPickupToast === "function") {
       showPickupToast(payload.text, { broadcast: true, fromNetwork: true });
     }
