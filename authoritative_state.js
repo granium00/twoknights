@@ -109,7 +109,9 @@ function applyAuthoritativeAction(state, action) {
           x: entry.x,
           y: entry.y,
           typeKey: entry.typeKey,
-          spawnedAtTurn: entry.spawnedAtTurn
+          spawnedAtTurn: typeof entry.spawnedAtTurn === "number"
+            ? entry.spawnedAtTurn
+            : state.turnCounter
         }));
       }
       if (typeof next.turnsUntilResources === "number") {
