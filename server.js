@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { Server } = require("socket.io");
+const { createAuthoritativeState, applyAuthoritativeAction } = require("./authoritative_state");
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -60,6 +61,7 @@ const io = new Server(server, {
 
 let hostId = null;
 let latestState = null;
+let authoritativeState = createAuthoritativeState();
 const playerAssignments = new Map();
 
 function getAvailablePlayers() {
@@ -98,10 +100,24 @@ io.on("connection", socket => {
   if (latestState) {
     socket.emit("stateUpdate", latestState);
   }
+  if (authoritativeState) {
+    socket.emit("auth:state", authoritativeState);
+  }
 
   socket.on("clientAction", action => {
     if (hostId) {
       io.emit("hostAction", action);
+    }
+  });
+
+  socket.on("auth:action", action => {
+    authoritativeState = applyAuthoritativeAction(authoritativeState, action);
+    io.emit("auth:state", authoritativeState);
+  });
+
+  socket.on("auth:requestState", () => {
+    if (authoritativeState) {
+      socket.emit("auth:state", authoritativeState);
     }
   });
 
