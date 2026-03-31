@@ -62,19 +62,38 @@ let hostId = null;
 let latestState = null;
 const playerAssignments = new Map();
 
-function pickPlayerIndex() {
-  const used = new Set(playerAssignments.values());
-  if (!used.has(0)) return 0;
-  if (!used.has(1)) return 1;
-  return 0;
+function getAvailablePlayers() {
+  const used = new Set(Array.from(playerAssignments.values()).filter(value => value !== null));
+  const available = [];
+  if (!used.has(0)) available.push(0);
+  if (!used.has(1)) available.push(1);
+  return available;
+}
+
+function getSocketIdByPlayerIndex(index) {
+  for (const [socketId, value] of playerAssignments.entries()) {
+    if (value === index) return socketId;
+  }
+  return null;
+}
+
+function broadcastRoles() {
+  const availablePlayers = getAvailablePlayers();
+  io.sockets.sockets.forEach(sock => {
+    sock.emit("role", {
+      isHost: sock.id === hostId,
+      playerIndex: playerAssignments.get(sock.id),
+      availablePlayers
+    });
+  });
 }
 
 io.on("connection", socket => {
   const isHost = !hostId;
   if (isHost) hostId = socket.id;
-  const playerIndex = pickPlayerIndex();
-  playerAssignments.set(socket.id, playerIndex);
-  socket.emit("role", { isHost, playerIndex });
+  playerAssignments.set(socket.id, null);
+  socket.emit("role", { isHost, playerIndex: null, availablePlayers: getAvailablePlayers() });
+  io.emit("playerAvailability", { availablePlayers: getAvailablePlayers() });
 
   if (latestState) {
     socket.emit("stateUpdate", latestState);
@@ -93,16 +112,51 @@ io.on("connection", socket => {
   socket.on("hostState", state => {
     latestState = state;
     socket.broadcast.emit("stateUpdate", state);
+    if (state && typeof state.currentPlayerIndex === "number") {
+      const desiredHost = getSocketIdByPlayerIndex(state.currentPlayerIndex);
+      if (desiredHost && desiredHost !== hostId) {
+        hostId = desiredHost;
+        broadcastRoles();
+      }
+    }
+  });
+
+  socket.on("requestPlayerIndex", index => {
+    if (index !== 0 && index !== 1) return;
+    const taken = Array.from(playerAssignments.values()).some(value => value === index);
+    if (taken) {
+      socket.emit("role", {
+        isHost: socket.id === hostId,
+        playerIndex: playerAssignments.get(socket.id),
+        availablePlayers: getAvailablePlayers()
+      });
+      return;
+    }
+    playerAssignments.set(socket.id, index);
+    if (!latestState && index === 0) {
+      hostId = socket.id;
+    } else if (latestState && typeof latestState.currentPlayerIndex === "number" &&
+      latestState.currentPlayerIndex === index) {
+      hostId = socket.id;
+    }
+    socket.emit("role", {
+      isHost: socket.id === hostId,
+      playerIndex: index,
+      availablePlayers: getAvailablePlayers()
+    });
+    io.emit("playerAvailability", { availablePlayers: getAvailablePlayers() });
+    broadcastRoles();
   });
 
   socket.on("disconnect", () => {
     playerAssignments.delete(socket.id);
+    io.emit("playerAvailability", { availablePlayers: getAvailablePlayers() });
     if (socket.id === hostId) {
       hostId = null;
       const ids = Array.from(io.sockets.sockets.keys());
       if (ids.length > 0) {
         hostId = ids[0];
-        io.to(hostId).emit("role", { isHost: true, playerIndex: playerAssignments.get(hostId) });
+        broadcastRoles();
       }
     }
   });

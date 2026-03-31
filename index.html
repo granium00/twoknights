@@ -213,6 +213,7 @@
       </div>
       <div id="controls">
         <button id="rollBtn">Бросить кубики</button>
+        <button id="endTurnBtn">Сделать ход</button>
         <div id="turnInfo">Ход: Игрок 1</div>
         <div id="rollInfo">Бросок: -</div>
         <div id="movesInfo">Ходов осталось: 0</div>
@@ -225,6 +226,17 @@
     </div>
   </div>
 
+</div>
+
+<div id="playerSelectModal">
+  <div class="player-select-card">
+    <h3>Выберите игрока</h3>
+    <div class="player-select-actions">
+      <button type="button" class="player-select-btn" data-player-choice="0">Игрок 1</button>
+      <button type="button" class="player-select-btn" data-player-choice="1">Игрок 2</button>
+    </div>
+    <div class="player-select-hint">Без выбора играть нельзя.</div>
+  </div>
 </div>
 
 <div id="pickupToast">

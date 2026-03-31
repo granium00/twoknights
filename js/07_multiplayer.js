@@ -11,6 +11,32 @@ let performingRemoteAction = false;
 let pendingState = null;
 let applyStateTimer = null;
 const STATE_APPLY_DEBOUNCE_MS = 40;
+const playerSelectModal = document.getElementById("playerSelectModal");
+const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
+
+function setPlayerSelectVisible(visible) {
+  if (!playerSelectModal) return;
+  playerSelectModal.classList.toggle("active", visible);
+}
+
+function updatePlayerSelectAvailability(availablePlayers) {
+  if (!playerSelectButtons.length) return;
+  const available = Array.isArray(availablePlayers) ? new Set(availablePlayers) : new Set();
+  playerSelectButtons.forEach(btn => {
+    const value = Number(btn.dataset.playerChoice);
+    if (Number.isNaN(value)) return;
+    btn.disabled = !available.has(value);
+  });
+}
+
+playerSelectButtons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (!socket) return;
+    const value = Number(btn.dataset.playerChoice);
+    if (Number.isNaN(value)) return;
+    socket.emit("requestPlayerIndex", value);
+  });
+});
 
 function shallowClone(obj) {
   return JSON.parse(JSON.stringify(obj));
@@ -523,6 +549,9 @@ function queueStateApply(state) {
 }
 
 function getActionFromEvent(e) {
+  if (typeof canLocalAct === "function" && !canLocalAct()) {
+    return null;
+  }
   const target = e.target;
   if (!target) return null;
 
@@ -610,14 +639,23 @@ if (socket) {
     if (payload && typeof payload.playerIndex === "number") {
       localPlayerIndex = payload.playerIndex;
     } else {
-      localPlayerIndex = isHost ? 0 : 1;
+      localPlayerIndex = null;
     }
+    updatePlayerSelectAvailability(payload?.availablePlayers);
+    setPlayerSelectVisible(localPlayerIndex === null);
     if (typeof updatePlayerResources === "function" && Array.isArray(players)) {
       players.forEach((_, idx) => updatePlayerResources(idx));
+    }
+    if (typeof updateTurnUI === "function") {
+      updateTurnUI();
     }
     if (isHost) {
       setTimeout(() => emitStateNow(true), 0);
     }
+  });
+
+  socket.on("playerAvailability", payload => {
+    updatePlayerSelectAvailability(payload?.availablePlayers);
   });
 
   socket.on("hostAction", action => {

@@ -82,6 +82,14 @@ function getLocalPlayerIndex() {
     : null;
 }
 
+function canLocalAct() {
+  const inMultiplayer = typeof socket !== "undefined" && socket;
+  if (!inMultiplayer) return true;
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null) return false;
+  return localIndex === currentPlayerIndex;
+}
+
 function isPlayerInfoHidden(targetIndex) {
   const localIndex = getLocalPlayerIndex();
   if (localIndex === null || localIndex === targetIndex) return false;
@@ -3613,6 +3621,8 @@ function finalizeMove(gridX, gridY) {
 
 function updateTurnUI() {
   const currentPlayer = players[currentPlayerIndex];
+  const allowLocal = canLocalAct();
+  document.body.classList.toggle("turn-locked", !allowLocal);
   if (turnInfo) {
     turnInfo.textContent = "";
     turnInfo.style.display = "none";
@@ -3631,8 +3641,11 @@ function updateTurnUI() {
     }
   }
   if (rollBtn) {
-    rollBtn.disabled = true;
+    rollBtn.disabled = !allowLocal;
     rollBtn.style.display = "none";
+  }
+  if (endTurnBtn) {
+    endTurnBtn.disabled = !allowLocal;
   }
   doubleMsg.style.display = justRolledDouble ? "block" : "none";
   if (currentPlayerName) {
@@ -3772,6 +3785,8 @@ function scheduleAutoRoll() {
 }
 
 function tryAutoRoll() {
+  const inMultiplayer = typeof socket !== "undefined" && socket;
+  if (inMultiplayer && !isHost) return;
   if (gameEnded) return;
   if (movesRemaining > 0) return;
   if (processRobberAmbushChance()) return;
@@ -3844,6 +3859,17 @@ function doRoll() {
 if (rollBtn) {
   rollBtn.addEventListener("click", () => {
     tryAutoRoll();
+  });
+}
+if (endTurnBtn) {
+  endTurnBtn.addEventListener("click", () => {
+    if (!canLocalAct()) return;
+    if (movesRemaining > 0) {
+      movesRemaining = 0;
+      clearReachable();
+    }
+    showPickupToast("Ход завершен.");
+    endTurn();
   });
 }
 function resetGameState() {

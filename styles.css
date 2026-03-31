@@ -435,11 +435,70 @@
     .inventory-panel.info-hidden {
       opacity: 0.65;
     }
-    .inventory-empty {
-      color: #7f8ea3;
-      font-size: 0.85em;
-      padding: 6px 0;
-    }
+.inventory-empty {
+  color: #7f8ea3;
+  font-size: 0.85em;
+  padding: 6px 0;
+}
+
+body.turn-locked #game,
+body.turn-locked #controls,
+body.turn-locked #newGameBtn,
+body.turn-locked .player-slot {
+  pointer-events: none;
+}
+body.turn-locked #game {
+  opacity: 0.6;
+}
+
+#playerSelectModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 12, 22, 0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+#playerSelectModal.active {
+  display: flex;
+}
+.player-select-card {
+  background: #132030;
+  border: 1px solid #2a3b55;
+  border-radius: 10px;
+  padding: 18px 20px;
+  min-width: 240px;
+  text-align: center;
+}
+.player-select-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  color: #e2e8f0;
+}
+.player-select-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.player-select-btn {
+  background: #3a506b;
+  color: #e9ecef;
+  border: 1px solid #2a3b55;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.player-select-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.player-select-hint {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: #9fb0c4;
+}
     .inventory-title {
       font-weight: 700;
       letter-spacing: 0.08em;
@@ -1188,6 +1247,18 @@
       letter-spacing: 0.02em;
       white-space: nowrap;
     }
+    #endTurnBtn {
+      background: #274c77;
+      color: #e9ecef;
+      border: 1px solid #1f2b3a;
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      width: 100%;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
     #newGameBtn {
       background: #2a3b55;
       color: #e9ecef;
@@ -1202,6 +1273,10 @@
     }
     #rollBtn:disabled {
       opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #endTurnBtn:disabled {
+      opacity: 0.45;
       cursor: not-allowed;
     }
     #turnInfo, #rollInfo, #movesInfo {

@@ -12,6 +12,7 @@ const resourceCountdownRight = document.getElementById("resourceCountdownRight")
 const treasureState = document.getElementById("treasureState");
 const treasureStateRight = document.getElementById("treasureStateRight");
 const rollBtn = document.getElementById("rollBtn");
+const endTurnBtn = document.getElementById("endTurnBtn");
 const newGameBtn = document.getElementById("newGameBtn");
 const turnInfo = document.getElementById("turnInfo");
 const rollInfo = document.getElementById("rollInfo");
