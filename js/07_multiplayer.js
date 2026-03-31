@@ -1022,11 +1022,8 @@ function getActionFromEvent(e) {
 }
 
 function shouldApplyHostAction(action) {
-  if (isHost) return true;
-  const hasLocal = typeof localPlayerIndex !== "undefined" && localPlayerIndex !== null;
-  const hasPlayerIndex = action && Object.prototype.hasOwnProperty.call(action, "playerIndex");
-  if (!hasPlayerIndex || !hasLocal) return true;
-  return action.playerIndex === localPlayerIndex;
+  if (!action || typeof action.playerIndex !== "number") return true;
+  return action.playerIndex === currentPlayerIndex;
 }
 
 function performHostAction(action) {
@@ -1093,6 +1090,10 @@ if (socket) {
 
   socket.on("hostAction", action => {
     if (!isHost) {
+      return;
+    }
+    if (!shouldApplyHostAction(action)) {
+      setTimeout(() => emitStateNow(true), 0);
       return;
     }
     performHostAction(action);

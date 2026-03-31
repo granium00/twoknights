@@ -103,15 +103,19 @@ function isPlayerInfoHidden(targetIndex) {
 function canSeePlayerBaseStats(targetIndex) {
   const localIndex = getLocalPlayerIndex();
   if (localIndex === null || localIndex === targetIndex) return true;
-  return !isPlayerInfoHidden(targetIndex);
+  return canSeePlayerCastleStats(targetIndex);
 }
 
 function canSeePlayerPocket(targetIndex) {
-  return canSeePlayerBaseStats(targetIndex);
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null || localIndex === targetIndex) return true;
+  return !isPlayerInfoHidden(targetIndex);
 }
 
 function canSeePlayerInventory(targetIndex) {
-  return canSeePlayerBaseStats(targetIndex);
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null || localIndex === targetIndex) return true;
+  return !isPlayerInfoHidden(targetIndex);
 }
 
 function getCastleDistanceToPlayer(castleKey, player) {
