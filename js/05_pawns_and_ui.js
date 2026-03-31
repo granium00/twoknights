@@ -367,9 +367,9 @@ players.forEach((_, index) => {
   updatePlayerResources(index);
 });
 
-function showPickupToast(text) {
+function showPickupToast(text, options = {}) {
   const localIndex = getLocalPlayerIndex();
-  if (localIndex !== null && localIndex !== currentPlayerIndex) {
+  if (!options.broadcast && localIndex !== null && localIndex !== currentPlayerIndex) {
     return;
   }
   pickupText.textContent = text;
@@ -899,7 +899,11 @@ function skipDevTurns() {
   const count = Math.max(0, Math.floor(raw));
   for (let i = 0; i < count; i += 1) {
     if (gameEnded) break;
-    endTurn();
+    if (!modalOpened) {
+      endTurn(true);
+    } else {
+      endTurn();
+    }
   }
 }
 
@@ -3402,6 +3406,7 @@ function showReachable() {
 function finalizeMove(gridX, gridY) {
   const key = `${gridX},${gridY}`;
   const currentPlayer = players[currentPlayerIndex];
+  let modalOpened = false;
   currentPlayer.x = gridX;
   currentPlayer.y = gridY;
   movesRemaining = 0;
@@ -3413,8 +3418,10 @@ function finalizeMove(gridX, gridY) {
   if (node && node.type === "castle") {
     const previousOwner = castleOwnersByKey[castleKey];
     if (typeof previousOwner === "number" && previousOwner !== currentPlayerIndex) {
-      const battleResult = resolveCastleBattle(currentPlayerIndex, castleKey);
-      showBattleModal(battleResult);
+        const battleResult = resolveCastleBattle(currentPlayerIndex, castleKey);
+        modalOpened = true;
+        modalOpened = true;
+        showBattleModal(battleResult);
       if (battleResult.healthRemaining <= 0) {
         showGameOver(currentPlayerIndex);
       }
@@ -3458,18 +3465,21 @@ function finalizeMove(gridX, gridY) {
     if (castleOwnersByKey[castleKey] === currentPlayerIndex) {
       depositPocketCurrencyToPlayer(currentPlayerIndex);
       recalcPlayerResourceIncome(currentPlayerIndex);
-      showCastleModal(castleKey, currentPlayerIndex);
+        modalOpened = true;
+        showCastleModal(castleKey, currentPlayerIndex);
     }
   }
   const dragonKey = getDragonBaseKeyForPos(gridX, gridY);
-  if (dragonKey) {
-    if (!currentPlayer.hasSword) {
-      showPickupToast("Без меча героя нельзя вступить в бой с драконом.");
-      endTurn();
-      return;
-    }
-    const battleResult = resolveDragonBattle(currentPlayerIndex, 50);
-    showBattleModal(battleResult);
+    if (dragonKey) {
+      if (!currentPlayer.hasSword) {
+        showPickupToast("Без меча героя нельзя вступить в бой с драконом.");
+        endTurn(true);
+        return;
+      }
+      const battleResult = resolveDragonBattle(currentPlayerIndex, 50);
+      modalOpened = true;
+      modalOpened = true;
+      showBattleModal(battleResult);
     if (battleResult && battleResult.winnerIndex === currentPlayerIndex) {
       showGameOver(currentPlayerIndex);
     }
@@ -3506,78 +3516,89 @@ function finalizeMove(gridX, gridY) {
     }
   }
   const specialEntry = specialByPos[key];
-  if (specialEntry && specialEntry.disabled && specialEntry.ownerIndex === currentPlayerIndex) {
-    openRepairModal({ ...specialEntry, key }, currentPlayerIndex);
-  }
-  if (specialEntry && specialEntry.type === "portal") {
-    const otherKey = typeof getOtherPortalKey === "function" ? getOtherPortalKey(key) : null;
-    if (otherKey) {
-      const [tx, ty] = otherKey.split(",").map(Number);
+    if (specialEntry && specialEntry.disabled && specialEntry.ownerIndex === currentPlayerIndex) {
+      modalOpened = true;
+      openRepairModal({ ...specialEntry, key }, currentPlayerIndex);
+    }
+    if (specialEntry && specialEntry.type === "portal") {
+      const otherKey = typeof getOtherPortalKey === "function" ? getOtherPortalKey(key) : null;
+      if (otherKey) {
+        const [tx, ty] = otherKey.split(",").map(Number);
       if (typeof clearPortalPair === "function") {
         clearPortalPair();
       }
       currentPlayer.x = tx;
       currentPlayer.y = ty;
-      updatePawns();
-      showPickupToast("Портал перенес вас.");
-      endTurn();
-      return;
+        updatePawns();
+        showPickupToast("Портал перенес вас.");
+        endTurn(true);
+        return;
+      }
     }
-  }
   if (specialEntry && specialEntry.type === "troll-cave") {
     const trollInCave = typeof isTrollInCaveAtKey === "function" && isTrollInCaveAtKey(key);
     if (!trollInCave) {
       const caveIndex = typeof getTrollCaveIndexByKey === "function" ? getTrollCaveIndexByKey(key) : -1;
       const alreadyLooted = caveIndex >= 0 && TROLL_CAVES && TROLL_CAVES[caveIndex]?.looted;
-      if (alreadyLooted) {
-        openTrollCaveModal("\u041f\u0435\u0449\u0435\u0440\u0430 \u043f\u0443\u0441\u0442\u0430.");
-      } else {
+        if (alreadyLooted) {
+          modalOpened = true;
+          openTrollCaveModal("\u041f\u0435\u0449\u0435\u0440\u0430 \u043f\u0443\u0441\u0442\u0430.");
+        } else {
         const lootText = rollTrollCaveLoot(currentPlayerIndex);
         if (caveIndex >= 0 && typeof markTrollCaveLooted === "function") {
           markTrollCaveLooted(caveIndex, true);
         }
-        if (lootText) {
-          openTrollCaveModal(lootText);
+          if (lootText) {
+            modalOpened = true;
+            openTrollCaveModal(lootText);
+          }
         }
-      }
       endTurn();
       return;
     }
   }
   if (specialEntry && specialEntry.type === "mage") {
     const mageSlot = getMageSlotById(specialEntry.mageId);
-    if (mageSlot && mageSlot.active) {
-      openMageModal(mageSlot, currentPlayerIndex);
+      if (mageSlot && mageSlot.active) {
+        modalOpened = true;
+        openMageModal(mageSlot, currentPlayerIndex);
+      }
+  }
+    if (node && node.id === 2) {
+      modalOpened = true;
+      openBarracks(currentPlayerIndex);
     }
-  }
-  if (node && node.id === 2) {
-    openBarracks(currentPlayerIndex);
-  }
-  if (node && node.id === 9) {
-    openLavka(currentPlayerIndex);
-  }
-  if (node && node.id === 19) {
-    openWorkshop(currentPlayerIndex);
-  }
-  if (node && node.id === 15) {
-    openCity(currentPlayerIndex);
-  }
-  if (node && node.id === 6) {
-    openHire(currentPlayerIndex);
-  }
+    if (node && node.id === 9) {
+      modalOpened = true;
+      openLavka(currentPlayerIndex);
+    }
+    if (node && node.id === 19) {
+      modalOpened = true;
+      openWorkshop(currentPlayerIndex);
+    }
+    if (node && node.id === 15) {
+      modalOpened = true;
+      openCity(currentPlayerIndex);
+    }
+    if (node && node.id === 6) {
+      modalOpened = true;
+      openHire(currentPlayerIndex);
+    }
 
-  if (stoneByPos[key]) {
-    openStoneModal(key, currentPlayerIndex);
-  }
+    if (stoneByPos[key]) {
+      modalOpened = true;
+      openStoneModal(key, currentPlayerIndex);
+    }
   if (rainbowByPos[key]) {
     currentPlayer.rainbowStoneCount = (currentPlayer.rainbowStoneCount || 0) + 1;
     updatePlayerResources(currentPlayerIndex);
-    showPickupToast("Радужный камень добавлен в инвентарь.");
+      showPickupToast("Радужный камень добавлен в инвентарь.", { broadcast: true });
     clearRainbowStone(key);
   }
-  if (masterActive && key === MASTER_CELL.key) {
-    openMasterModal(currentPlayerIndex);
-  }
+    if (masterActive && key === MASTER_CELL.key) {
+      modalOpened = true;
+      openMasterModal(currentPlayerIndex);
+    }
 
   const resourceNode = resourceByPos[key];
   if (resourceNode) {
@@ -3594,26 +3615,26 @@ function finalizeMove(gridX, gridY) {
     delete resourceByPos[key];
     setCellToInactive(x, y);
     const label = type.key === "gold" ? "золота" : type.key === "army" ? "войск" : "ресурсов";
-    showPickupToast(`В карман: +${amount} ${label}`);
+      showPickupToast(`В карман: +${amount} ${label}`, { broadcast: true });
   }
 
   if (treasure && treasure.key === key) {
     const goldReward = Math.floor(Math.random() * (1200 - 700 + 1)) + 700;
     currentPlayer.pocket.gold += goldReward;
     updatePlayerResources(currentPlayerIndex);
-    showPickupToast(`Сокровище: +${goldReward} золота в карман`);
+      showPickupToast(`Сокровище: +${goldReward} золота в карман`, { broadcast: true });
     clearTreasure();
   }
   if (flowerArtifact && flowerArtifact.key === key) {
     currentPlayer.flowerCount = (currentPlayer.flowerCount || 0) + 1;
     updatePlayerResources(currentPlayerIndex);
-    showPickupToast("Таинственный цветок добавлен в инвентарь.");
+      showPickupToast("Таинственный цветок добавлен в инвентарь.", { broadcast: true });
     clearFlower();
   }
   if (cloverArtifact && cloverArtifact.key === key) {
     currentPlayer.cloverCount = (currentPlayer.cloverCount || 0) + 1;
     updatePlayerResources(currentPlayerIndex);
-    showPickupToast("Клевер добавлен в инвентарь.");
+      showPickupToast("Клевер добавлен в инвентарь.", { broadcast: true });
     if (typeof clearClover === "function") {
       clearClover();
     }
