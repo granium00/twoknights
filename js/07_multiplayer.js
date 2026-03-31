@@ -823,6 +823,7 @@ function applyState(state) {
   const authActive = typeof lastAuthState !== "undefined" &&
     lastAuthState &&
     typeof lastAuthState.currentPlayerIndex === "number";
+  const boardState = authActive && lastAuthState ? lastAuthState : state;
 
   // Scalars
   if (!authActive) {
@@ -841,7 +842,9 @@ function applyState(state) {
   if (!authActive) {
     turnCounter = state.turnCounter ?? turnCounter;
   }
-  turnsUntilResources = state.turnsUntilResources ?? turnsUntilResources;
+  if (!authActive) {
+    turnsUntilResources = state.turnsUntilResources ?? turnsUntilResources;
+  }
   turnsUntilTreasure = state.turnsUntilTreasure ?? turnsUntilTreasure;
   treasureTurnsRemaining = state.treasureTurnsRemaining ?? treasureTurnsRemaining;
   flowerTurnsRemaining = state.flowerTurnsRemaining ?? flowerTurnsRemaining;
@@ -929,7 +932,7 @@ function applyState(state) {
     });
   }
 
-  const incomingBoardFingerprint = buildBoardFingerprintFromState(state);
+  const incomingBoardFingerprint = buildBoardFingerprintFromState(boardState);
   const localBoardFingerprint = buildBoardFingerprintFromLocal();
   const needsBoardSync = !hasInitialFullBoard || localBoardFingerprint !== incomingBoardFingerprint;
   if (needsBoardSync) {
@@ -943,18 +946,18 @@ function applyState(state) {
     (state.specialByPos || []).forEach(applySpecialEntry);
 
     // Resources
-    (state.resourceByPos || []).forEach(applyResourceEntry);
+    (boardState.resourceByPos || []).forEach(applyResourceEntry);
 
     // Treasure / artifacts
-    if (state.treasure) applyTreasure(state.treasure);
-    if (state.flowerArtifact) applyFlower(state.flowerArtifact);
-    if (state.cloverArtifact) applyClover(state.cloverArtifact);
-    cloverTurnsRemaining = state.cloverTurnsRemaining ?? cloverTurnsRemaining;
-    nextCloverSpawnTurn = state.nextCloverSpawnTurn ?? nextCloverSpawnTurn;
+    if (boardState.treasure) applyTreasure(boardState.treasure);
+    if (boardState.flowerArtifact) applyFlower(boardState.flowerArtifact);
+    if (boardState.cloverArtifact) applyClover(boardState.cloverArtifact);
+    cloverTurnsRemaining = boardState.cloverTurnsRemaining ?? cloverTurnsRemaining;
+    nextCloverSpawnTurn = boardState.nextCloverSpawnTurn ?? nextCloverSpawnTurn;
 
     // Stones
     (state.stoneByPos || []).forEach(applyStone);
-    (state.rainbowByPos || []).forEach(applyRainbow);
+    (boardState.rainbowByPos || []).forEach(applyRainbow);
 
     // Portals
     if (state.portalState && typeof portalState !== "undefined" && portalState) {
