@@ -3314,6 +3314,7 @@ let extraTurnReason = null;
 let justRolledDouble = false;
 let robberAmbushThisSession = false;
 let reachableKeys = new Set();
+let suppressReachableUntil = 0;
 let autoRollTimer = null;
 let doubleSound = null;
 let audioUnlocked = false;
@@ -3375,6 +3376,7 @@ const MOVES_DIRS = [
 function showReachable() {
   clearReachable();
   if (ballistaModePlayerIndex === currentPlayerIndex) return;
+  if (Date.now() < suppressReachableUntil) return;
   if (movesRemaining <= 0) return;
   const currentPlayer = players[currentPlayerIndex];
   const queue = [{x: currentPlayer.x, y: currentPlayer.y, steps: 0}];
@@ -3414,10 +3416,11 @@ function finalizeMove(gridX, gridY) {
   const key = `${gridX},${gridY}`;
   const currentPlayer = players[currentPlayerIndex];
   let modalOpened = false;
-  currentPlayer.x = gridX;
-  currentPlayer.y = gridY;
-  movesRemaining = 0;
-  clearReachable();
+    currentPlayer.x = gridX;
+    currentPlayer.y = gridY;
+    movesRemaining = 0;
+    suppressReachableUntil = Date.now() + 450;
+    clearReachable();
   updatePawns();
 
   const castleKey = getCastleBaseKeyForPos(gridX, gridY) || key;
@@ -3841,6 +3844,7 @@ function tryAutoRoll() {
 }
 
 function doRoll() {
+  suppressReachableUntil = 0;
   const die1 = testModeEnabled ? 12 : Math.floor(Math.random() * 6) + 1;
   const die2 = testModeEnabled ? 13 : Math.floor(Math.random() * 6) + 1;
   lastDie1 = die1;
