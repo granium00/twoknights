@@ -63,6 +63,15 @@ function applyAuthState(state) {
   if (typeof state.lastDie2 !== "undefined") {
     lastDie2 = state.lastDie2;
   }
+  if (typeof lastRoll !== "undefined" && lastRoll !== null) {
+    if (typeof lastDie1 === "number" && typeof lastDie2 === "number") {
+      lastRollText = `${lastDie1} + ${lastDie2} = ${lastRoll}`;
+    } else {
+      lastRollText = String(lastRoll);
+    }
+  } else {
+    lastRollText = "-";
+  }
   if (Array.isArray(state.players)) {
     state.players.forEach((p, idx) => {
       if (!players[idx]) return;
