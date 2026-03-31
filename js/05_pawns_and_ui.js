@@ -3050,6 +3050,9 @@ function buildBattleSummaryLines(result) {
 
 function shouldShowBattleForLocal(result) {
   if (!result) return false;
+  if (typeof result.attackerIndex === "number" && typeof result.defenderIndex === "number") {
+    return true;
+  }
   const localIndex = getLocalPlayerIndex();
   if (localIndex === null) return true;
   const keys = [

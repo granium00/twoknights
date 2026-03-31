@@ -158,17 +158,25 @@ io.on("connection", socket => {
       (action.type === "roll" || action.type === "move" || action.type === "end_turn")) {
       return;
     }
-    authoritativeState = applyAuthoritativeAction(authoritativeState, action);
+    const result = applyAuthoritativeAction(authoritativeState, action);
+    authoritativeState = result.state || authoritativeState;
     io.emit("auth:state", authoritativeState);
+    if (Array.isArray(result.events) && result.events.length) {
+      result.events.forEach(evt => io.emit("auth:event", evt));
+    }
   });
 
   socket.on("auth:bootstrap", payload => {
     authActive = true;
-    authoritativeState = applyAuthoritativeAction(authoritativeState, {
+    const result = applyAuthoritativeAction(authoritativeState, {
       type: "bootstrap",
       state: payload
     });
+    authoritativeState = result.state || authoritativeState;
     io.emit("auth:state", authoritativeState);
+    if (Array.isArray(result.events) && result.events.length) {
+      result.events.forEach(evt => io.emit("auth:event", evt));
+    }
   });
 
   socket.on("auth:requestState", () => {

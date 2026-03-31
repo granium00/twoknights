@@ -34,7 +34,36 @@ function emitAuthBootstrap() {
     lastRoll,
     lastDie1,
     lastDie2,
-    players: players.map(p => ({ x: p.x, y: p.y }))
+    turnsUntilResources,
+    players: players.map(p => ({
+      x: p.x,
+      y: p.y,
+      pocket: { ...p.pocket },
+      flowerCount: p.flowerCount || 0,
+      cloverCount: p.cloverCount || 0,
+      rainbowStoneCount: p.rainbowStoneCount || 0
+    })),
+    spawnableKeys: Object.keys(grid).filter(key => {
+      if (nodeByPos[key]) return false;
+      if (blockedCellKeys.has(key)) return false;
+      if (specialByPos[key]) return false;
+      return true;
+    }),
+    resourceByPos: Object.values(resourceByPos).map(entry => ({
+      key: entry.key,
+      x: entry.x,
+      y: entry.y,
+      typeKey: entry.type?.key || entry.typeKey
+    })),
+    treasure: treasure ? { key: treasure.key, x: treasure.x, y: treasure.y } : null,
+    flowerArtifact: flowerArtifact ? { key: flowerArtifact.key, x: flowerArtifact.x, y: flowerArtifact.y } : null,
+    cloverArtifact: cloverArtifact ? { key: cloverArtifact.key, x: cloverArtifact.x, y: cloverArtifact.y } : null,
+    rainbowByPos: Object.values(rainbowByPos).map(entry => ({
+      key: entry.key,
+      x: entry.x,
+      y: entry.y,
+      turnsRemaining: entry.turnsRemaining
+    }))
   };
   socket.emit("auth:bootstrap", payload);
 }
@@ -56,6 +85,9 @@ function applyAuthState(state) {
   }
   if (typeof state.movesRemaining === "number") {
     movesRemaining = state.movesRemaining;
+  }
+  if (typeof state.turnsUntilResources === "number") {
+    turnsUntilResources = state.turnsUntilResources;
   }
   if (typeof state.lastRoll !== "undefined") {
     lastRoll = state.lastRoll;
@@ -80,9 +112,26 @@ function applyAuthState(state) {
       if (!players[idx]) return;
       if (typeof p.x === "number") players[idx].x = p.x;
       if (typeof p.y === "number") players[idx].y = p.y;
+      if (p.pocket) {
+        players[idx].pocket.gold = p.pocket.gold ?? players[idx].pocket.gold;
+        players[idx].pocket.army = p.pocket.army ?? players[idx].pocket.army;
+        players[idx].pocket.resources = p.pocket.resources ?? players[idx].pocket.resources;
+      }
+      if (typeof p.flowerCount === "number") players[idx].flowerCount = p.flowerCount;
+      if (typeof p.cloverCount === "number") players[idx].cloverCount = p.cloverCount;
+      if (typeof p.rainbowStoneCount === "number") players[idx].rainbowStoneCount = p.rainbowStoneCount;
     });
   }
   updatePawns();
+  if (Array.isArray(state.resourceByPos)) {
+    if (typeof clearAllResources === "function") {
+      clearAllResources();
+    } else {
+      Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
+    }
+    state.resourceByPos.forEach(entry => applyResourceEntry(entry));
+  }
+  players.forEach((_, idx) => updatePlayerResources(idx));
   updateTurnUI();
   if (typeof updateStatusPanel === "function") {
     updateStatusPanel();
@@ -1212,6 +1261,67 @@ if (socket) {
 
   socket.on("auth:state", state => {
     applyAuthState(state);
+  });
+
+  socket.on("auth:event", evt => {
+    if (!evt || !evt.type) return;
+    if (evt.type === "pickup") {
+      if (evt.kind === "resource") {
+        const key = evt.key;
+        const entry = resourceByPos[key];
+        if (entry) {
+          delete resourceByPos[key];
+          setCellToInactive(entry.x, entry.y);
+        } else if (key) {
+          const parts = key.split(",").map(Number);
+          if (parts.length === 2) setCellToInactive(parts[0], parts[1]);
+        }
+        if (typeof showPickupToast === "function") {
+          const label = evt.typeKey === "gold" ? "золота" : evt.typeKey === "army" ? "войск" : "ресурсов";
+          showPickupToast(`В карман: +${evt.amount} ${label}`, { broadcast: true, fromNetwork: true });
+        }
+      }
+      if (evt.kind === "treasure") {
+        if (typeof clearTreasure === "function") clearTreasure();
+        if (typeof showPickupToast === "function") {
+          showPickupToast(`Сокровище: +${evt.amount} золота в карман`, { broadcast: true, fromNetwork: true });
+        }
+      }
+      if (evt.kind === "flower") {
+        if (typeof clearFlower === "function") clearFlower();
+        if (typeof showPickupToast === "function") {
+          showPickupToast("Таинственный цветок добавлен в инвентарь.", { broadcast: true, fromNetwork: true });
+        }
+      }
+      if (evt.kind === "clover") {
+        if (typeof clearClover === "function") clearClover();
+        if (typeof showPickupToast === "function") {
+          showPickupToast("Клевер добавлен в инвентарь.", { broadcast: true, fromNetwork: true });
+        }
+      }
+      if (evt.kind === "rainbow") {
+        if (typeof clearRainbowStone === "function" && evt.key) {
+          clearRainbowStone(evt.key);
+        } else if (evt.key) {
+          const parts = evt.key.split(",").map(Number);
+          if (parts.length === 2) setCellToInactive(parts[0], parts[1]);
+        }
+        if (typeof showPickupToast === "function") {
+          showPickupToast("Радужный камень добавлен в инвентарь.", { broadcast: true, fromNetwork: true });
+        }
+      }
+    }
+    if (evt.type === "spawn" && evt.kind === "resources" && Array.isArray(evt.items)) {
+      if (typeof clearAllResources === "function") {
+        clearAllResources();
+      } else {
+        Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
+      }
+      evt.items.forEach(entry => applyResourceEntry(entry));
+      if (typeof updateStatusPanel === "function") {
+        updateStatusPanel();
+      }
+    }
   });
 
   socket.on("pickupToast", payload => {
