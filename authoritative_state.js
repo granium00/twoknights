@@ -45,7 +45,10 @@ function applyAuthoritativeAction(state, action) {
   function pruneExpiredResources() {
     const toRemove = [];
     state.resourceByPos = state.resourceByPos.filter(entry => {
-      if (typeof entry.spawnedAtTurn !== "number") return true;
+      if (typeof entry.spawnedAtTurn !== "number") {
+        entry.spawnedAtTurn = state.turnCounter;
+        return true;
+      }
       if ((state.turnCounter - entry.spawnedAtTurn) >= RESOURCE_LIFETIME_TURNS) {
         toRemove.push(entry.key);
         return false;
@@ -56,6 +59,7 @@ function applyAuthoritativeAction(state, action) {
       events.push({ type: "despawn", kind: "resources", keys: toRemove });
     }
   }
+  pruneExpiredResources();
   switch (action.type) {
     case "bootstrap": {
       if (!action.state) return { state, events };

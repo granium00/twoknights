@@ -22,8 +22,38 @@ const FULL_STATE_INTERVAL = 1000;
 let hasInitialFullBoard = false;
 let lastAuthState = null;
 let applyingAuthState = false;
+const resourceSeenTurns = new Map();
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
+
+function filterResourceEntries(entries, turnRef) {
+  if (!Array.isArray(entries)) return [];
+  const filtered = [];
+  const seenKeys = new Set();
+  entries.forEach(entry => {
+    if (!entry) return;
+    const key = entry.key || `${entry.x},${entry.y}`;
+    if (!key) return;
+    let spawnedAt = typeof entry.spawnedAtTurn === "number"
+      ? entry.spawnedAtTurn
+      : resourceSeenTurns.get(key);
+    if (typeof spawnedAt !== "number") {
+      spawnedAt = turnRef;
+    }
+    const age = typeof turnRef === "number" ? (turnRef - spawnedAt) : 0;
+    if (age >= 6) {
+      resourceSeenTurns.delete(key);
+      return;
+    }
+    resourceSeenTurns.set(key, spawnedAt);
+    seenKeys.add(key);
+    filtered.push(Object.assign({}, entry, { key, spawnedAtTurn: spawnedAt }));
+  });
+  Array.from(resourceSeenTurns.keys()).forEach(key => {
+    if (!seenKeys.has(key)) resourceSeenTurns.delete(key);
+  });
+  return filtered;
+}
 
 function emitAuthBootstrap() {
   if (!socket || !isHost) return;
@@ -131,10 +161,7 @@ function applyAuthState(state) {
       Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
     }
     const turnRef = typeof state.turnCounter === "number" ? state.turnCounter : turnCounter;
-    const filtered = state.resourceByPos.filter(entry => {
-      if (typeof entry.spawnedAtTurn !== "number") return true;
-      return (turnRef - entry.spawnedAtTurn) < 6;
-    });
+    const filtered = filterResourceEntries(state.resourceByPos, turnRef);
     filtered.forEach(entry => applyResourceEntry(entry));
   }
   players.forEach((_, idx) => updatePlayerResources(idx));
@@ -951,7 +978,9 @@ function applyState(state) {
     (state.specialByPos || []).forEach(applySpecialEntry);
 
     // Resources
-    (boardState.resourceByPos || []).forEach(applyResourceEntry);
+    const boardTurnRef = typeof boardState.turnCounter === "number" ? boardState.turnCounter : turnCounter;
+    const filteredResources = filterResourceEntries(boardState.resourceByPos || [], boardTurnRef);
+    filteredResources.forEach(applyResourceEntry);
 
     // Treasure / artifacts
     if (boardState.treasure) applyTreasure(boardState.treasure);
@@ -1326,7 +1355,17 @@ if (socket) {
       } else {
         Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
       }
+      const turnRef = typeof turnCounter === "number" ? turnCounter : 0;
       evt.items.forEach(entry => applyResourceEntry(entry));
+      evt.items.forEach(entry => {
+        const key = entry.key || `${entry.x},${entry.y}`;
+        if (!key) return;
+        if (typeof entry.spawnedAtTurn === "number") {
+          resourceSeenTurns.set(key, entry.spawnedAtTurn);
+        } else if (typeof turnRef === "number") {
+          resourceSeenTurns.set(key, turnRef);
+        }
+      });
       if (typeof updateStatusPanel === "function") {
         updateStatusPanel();
       }
@@ -1341,6 +1380,7 @@ if (socket) {
           const parts = key.split(",").map(Number);
           if (parts.length === 2) setCellToInactive(parts[0], parts[1]);
         }
+        if (key) resourceSeenTurns.delete(key);
       });
       if (typeof updateStatusPanel === "function") {
         updateStatusPanel();
