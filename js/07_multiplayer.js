@@ -652,6 +652,13 @@ if (socket) {
     if (typeof updateTurnUI === "function") {
       updateTurnUI();
     }
+    if (!isHost && typeof autoRollTimer !== "undefined" && autoRollTimer) {
+      clearTimeout(autoRollTimer);
+      autoRollTimer = null;
+    }
+    if (isHost && typeof scheduleAutoRoll === "function") {
+      scheduleAutoRoll();
+    }
     if (isHost) {
       setTimeout(() => emitStateNow(true), 0);
     }

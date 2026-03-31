@@ -3770,7 +3770,13 @@ function endTurn(force = false) {
 
   updateTurnUI();
   players.forEach((_, idx) => updatePlayerResources(idx));
-  scheduleAutoRoll();
+  const inMultiplayer = typeof socket !== "undefined" && socket;
+  if (!inMultiplayer) {
+    scheduleAutoRoll();
+  } else if (isHost && typeof localPlayerIndex !== "undefined" &&
+    localPlayerIndex !== null && localPlayerIndex === currentPlayerIndex) {
+    scheduleAutoRoll();
+  }
 }
 
 function scheduleAutoRoll() {
