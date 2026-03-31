@@ -368,8 +368,16 @@ players.forEach((_, index) => {
 });
 
 function showPickupToast(text, options = {}) {
+  const fromNetwork = Boolean(options.fromNetwork);
+  const wantsBroadcast = Boolean(options.broadcast);
+  if (wantsBroadcast && !fromNetwork && typeof socket !== "undefined" && socket) {
+    if (typeof isHost !== "undefined" && isHost) {
+      socket.emit("pickupToast", { text });
+    }
+    return;
+  }
   const localIndex = getLocalPlayerIndex();
-  if (!options.broadcast && localIndex !== null && localIndex !== currentPlayerIndex) {
+  if (!wantsBroadcast && localIndex !== null && localIndex !== currentPlayerIndex) {
     return;
   }
   pickupText.textContent = text;

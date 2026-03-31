@@ -11,6 +11,7 @@ let performingRemoteAction = false;
 let pendingState = null;
 let applyStateTimer = null;
 const STATE_APPLY_DEBOUNCE_MS = 40;
+let lastBoardFingerprint = "";
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
 
@@ -433,77 +434,102 @@ function applyState(state) {
     });
   }
 
-  // Clear and rebuild board
-  resetDynamicCells();
-
-  // Special cells (incl. troll caves)
-  (state.specialByPos || []).forEach(applySpecialEntry);
-
-  // Resources
-  (state.resourceByPos || []).forEach(applyResourceEntry);
-
-  // Treasure / artifacts
-  if (state.treasure) applyTreasure(state.treasure);
-  if (state.flowerArtifact) applyFlower(state.flowerArtifact);
-  if (state.cloverArtifact) applyClover(state.cloverArtifact);
-  if (state.cloverArtifact) applyClover(state.cloverArtifact);
-  cloverTurnsRemaining = state.cloverTurnsRemaining ?? cloverTurnsRemaining;
-  nextCloverSpawnTurn = state.nextCloverSpawnTurn ?? nextCloverSpawnTurn;
-
-  // Stones
-  (state.stoneByPos || []).forEach(applyStone);
-  (state.rainbowByPos || []).forEach(applyRainbow);
-
-  // Portals
-  if (state.portalState && typeof portalState !== "undefined" && portalState) {
-    portalState.active = Boolean(state.portalState.active);
-    portalState.keys = Array.isArray(state.portalState.keys) ? state.portalState.keys.slice() : [];
-    portalState.turnsRemaining = state.portalState.turnsRemaining ?? portalState.turnsRemaining;
-    portalState.nextSpawnTurn = state.portalState.nextSpawnTurn ?? portalState.nextSpawnTurn;
-  }
-
-  // Master
-  if (state.masterActive) applyMaster();
-
-  // Mage
-  if (state.mageSlot) {
-    mageSlot.nextSpawnTurn = state.mageSlot.nextSpawnTurn ?? mageSlot.nextSpawnTurn;
-    applyMageSlot(state.mageSlot);
-  }
-
-  // Troll
-  if (state.trollState) {
-    trollState = Object.assign(trollState, state.trollState);
-    trollState.prevKey = null;
-    updateTrollVisual();
-  }
-
-  // Barbarians
-  barbarianCells.length = 0;
-  (state.barbarianCells || []).forEach(entry => {
-    applyBarbarianCell(entry);
-    barbarianCells.push(entry);
+  const boardFingerprint = JSON.stringify({
+    resourceByPos: state.resourceByPos || [],
+    specialByPos: state.specialByPos || [],
+    treasure: state.treasure || null,
+    flowerArtifact: state.flowerArtifact || null,
+    cloverArtifact: state.cloverArtifact || null,
+    cloverTurnsRemaining: state.cloverTurnsRemaining,
+    nextCloverSpawnTurn: state.nextCloverSpawnTurn,
+    stoneByPos: state.stoneByPos || [],
+    rainbowByPos: state.rainbowByPos || [],
+    portalState: state.portalState || null,
+    masterActive: state.masterActive,
+    mageSlot: state.mageSlot || null,
+    trollState: state.trollState || null,
+    barbarianCells: state.barbarianCells || [],
+    barbarianRespawnTimers: state.barbarianRespawnTimers || [],
+    mercenaries: state.mercenaries || [],
+    mercenaryIdCounter: state.mercenaryIdCounter,
+    thieves: state.thieves || [],
+    thiefIdCounter: state.thiefIdCounter
   });
-  barbarianRespawnTimers.length = 0;
-  if (Array.isArray(state.barbarianRespawnTimers)) {
-    barbarianRespawnTimers.push(...state.barbarianRespawnTimers);
+  const boardChanged = boardFingerprint !== lastBoardFingerprint;
+  if (boardChanged) {
+    lastBoardFingerprint = boardFingerprint;
+
+    // Clear and rebuild board
+    resetDynamicCells();
+
+    // Special cells (incl. troll caves)
+    (state.specialByPos || []).forEach(applySpecialEntry);
+
+    // Resources
+    (state.resourceByPos || []).forEach(applyResourceEntry);
+
+    // Treasure / artifacts
+    if (state.treasure) applyTreasure(state.treasure);
+    if (state.flowerArtifact) applyFlower(state.flowerArtifact);
+    if (state.cloverArtifact) applyClover(state.cloverArtifact);
+    cloverTurnsRemaining = state.cloverTurnsRemaining ?? cloverTurnsRemaining;
+    nextCloverSpawnTurn = state.nextCloverSpawnTurn ?? nextCloverSpawnTurn;
+
+    // Stones
+    (state.stoneByPos || []).forEach(applyStone);
+    (state.rainbowByPos || []).forEach(applyRainbow);
+
+    // Portals
+    if (state.portalState && typeof portalState !== "undefined" && portalState) {
+      portalState.active = Boolean(state.portalState.active);
+      portalState.keys = Array.isArray(state.portalState.keys) ? state.portalState.keys.slice() : [];
+      portalState.turnsRemaining = state.portalState.turnsRemaining ?? portalState.turnsRemaining;
+      portalState.nextSpawnTurn = state.portalState.nextSpawnTurn ?? portalState.nextSpawnTurn;
+    }
+
+    // Master
+    if (state.masterActive) applyMaster();
+
+    // Mage
+    if (state.mageSlot) {
+      mageSlot.nextSpawnTurn = state.mageSlot.nextSpawnTurn ?? mageSlot.nextSpawnTurn;
+      applyMageSlot(state.mageSlot);
+    }
+
+    // Troll
+    if (state.trollState) {
+      trollState = Object.assign(trollState, state.trollState);
+      trollState.prevKey = null;
+      updateTrollVisual();
+    }
+
+    // Barbarians
+    barbarianCells.length = 0;
+    (state.barbarianCells || []).forEach(entry => {
+      applyBarbarianCell(entry);
+      barbarianCells.push(entry);
+    });
+    barbarianRespawnTimers.length = 0;
+    if (Array.isArray(state.barbarianRespawnTimers)) {
+      barbarianRespawnTimers.push(...state.barbarianRespawnTimers);
+    }
+
+    // Mercenaries
+    mercenaries.length = 0;
+    (state.mercenaries || []).forEach(entry => {
+      applyMercenary(entry);
+      mercenaries.push(entry);
+    });
+    mercenaryIdCounter = state.mercenaryIdCounter ?? mercenaryIdCounter;
+
+    // Thieves
+    thieves.length = 0;
+    (state.thieves || []).forEach(entry => {
+      applyThief(entry);
+      thieves.push(entry);
+    });
+    thiefIdCounter = state.thiefIdCounter ?? thiefIdCounter;
   }
-
-  // Mercenaries
-  mercenaries.length = 0;
-  (state.mercenaries || []).forEach(entry => {
-    applyMercenary(entry);
-    mercenaries.push(entry);
-  });
-  mercenaryIdCounter = state.mercenaryIdCounter ?? mercenaryIdCounter;
-
-  // Thieves
-  thieves.length = 0;
-  (state.thieves || []).forEach(entry => {
-    applyThief(entry);
-    thieves.push(entry);
-  });
-  thiefIdCounter = state.thiefIdCounter ?? thiefIdCounter;
 
   // Reachable
   clearReachable();
@@ -680,6 +706,13 @@ if (socket) {
     if (isHost) return;
     if (!state || applyingRemoteState) return;
     queueStateApply(state);
+  });
+
+  socket.on("pickupToast", payload => {
+    if (!payload || typeof payload.text !== "string") return;
+    if (typeof showPickupToast === "function") {
+      showPickupToast(payload.text, { broadcast: true, fromNetwork: true });
+    }
   });
 
   document.addEventListener("click", e => {

@@ -121,6 +121,11 @@ io.on("connection", socket => {
     }
   });
 
+  socket.on("pickupToast", payload => {
+    if (!payload || typeof payload.text !== "string") return;
+    io.emit("pickupToast", { text: payload.text });
+  });
+
   socket.on("requestPlayerIndex", index => {
     if (index !== 0 && index !== 1) return;
     const taken = Array.from(playerAssignments.values()).some(value => value === index);
