@@ -621,12 +621,11 @@ if (socket) {
   });
 
   socket.on("hostAction", action => {
-    if (shouldApplyHostAction(action)) {
-      performHostAction(action);
+    if (!isHost) {
+      return;
     }
-    if (isHost) {
-      setTimeout(() => emitStateNow(true), 0);
-    }
+    performHostAction(action);
+    setTimeout(() => emitStateNow(true), 0);
   });
 
   socket.on("stateUpdate", state => {
