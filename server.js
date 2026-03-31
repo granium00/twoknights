@@ -60,11 +60,21 @@ const io = new Server(server, {
 
 let hostId = null;
 let latestState = null;
+const playerAssignments = new Map();
+
+function pickPlayerIndex() {
+  const used = new Set(playerAssignments.values());
+  if (!used.has(0)) return 0;
+  if (!used.has(1)) return 1;
+  return 0;
+}
 
 io.on("connection", socket => {
   const isHost = !hostId;
   if (isHost) hostId = socket.id;
-  socket.emit("role", { isHost });
+  const playerIndex = pickPlayerIndex();
+  playerAssignments.set(socket.id, playerIndex);
+  socket.emit("role", { isHost, playerIndex });
 
   if (latestState) {
     socket.emit("stateUpdate", latestState);
@@ -86,12 +96,13 @@ io.on("connection", socket => {
   });
 
   socket.on("disconnect", () => {
+    playerAssignments.delete(socket.id);
     if (socket.id === hostId) {
       hostId = null;
       const ids = Array.from(io.sockets.sockets.keys());
       if (ids.length > 0) {
         hostId = ids[0];
-        io.to(hostId).emit("role", { isHost: true });
+        io.to(hostId).emit("role", { isHost: true, playerIndex: playerAssignments.get(hostId) });
       }
     }
   });

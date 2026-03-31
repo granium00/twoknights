@@ -323,6 +323,9 @@
       border-radius: 6px;
       font-size: 0.95em;
     }
+    .player-panel.info-hidden {
+      opacity: 0.75;
+    }
     .player-panel.active {
       border-color: #a5b4c6;
       box-shadow: 0 0 0 2px #2a3b55;
@@ -428,6 +431,14 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+    }
+    .inventory-panel.info-hidden {
+      opacity: 0.65;
+    }
+    .inventory-empty {
+      color: #7f8ea3;
+      font-size: 0.85em;
+      padding: 6px 0;
     }
     .inventory-title {
       font-weight: 700;

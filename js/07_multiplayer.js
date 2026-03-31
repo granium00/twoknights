@@ -110,6 +110,12 @@ function buildState() {
       y: entry.y,
       turnsRemaining: entry.turnsRemaining
     })),
+    portalState: portalState ? {
+      active: portalState.active,
+      keys: Array.isArray(portalState.keys) ? shallowClone(portalState.keys) : [],
+      turnsRemaining: portalState.turnsRemaining,
+      nextSpawnTurn: portalState.nextSpawnTurn
+    } : null,
     mageSlot: {
       active: mageSlot.active,
       turnsRemaining: mageSlot.turnsRemaining,
@@ -164,6 +170,14 @@ function resetDynamicCells() {
   Object.keys(specialByPos).forEach(key => delete specialByPos[key]);
   Object.keys(stoneByPos).forEach(key => delete stoneByPos[key]);
   Object.keys(rainbowByPos).forEach(key => delete rainbowByPos[key]);
+  if (typeof initPortalState === "function") {
+    initPortalState();
+  } else if (typeof portalState !== "undefined" && portalState) {
+    portalState.active = false;
+    portalState.keys = [];
+    portalState.turnsRemaining = 0;
+    portalState.nextSpawnTurn = null;
+  }
   barbarianCells.length = 0;
   barbarianRespawnTimers.length = 0;
   mercenaries.length = 0;
@@ -220,6 +234,9 @@ function applySpecialEntry(entry) {
   if (!cell) return;
   if (entry.extraClass === "mage") {
     setCellIcon(cell, "mage.png", "Маг");
+  }
+  if (entry.extraClass === "portal") {
+    setCellIcon(cell, "portal.png", "Портал");
   }
   if (entry.extraClass === "troll-cave") {
     setCellIcon(cell, "troll_cave.png", "Пещера троллей");
@@ -405,6 +422,14 @@ function applyState(state) {
   (state.stoneByPos || []).forEach(applyStone);
   (state.rainbowByPos || []).forEach(applyRainbow);
 
+  // Portals
+  if (state.portalState && typeof portalState !== "undefined" && portalState) {
+    portalState.active = Boolean(state.portalState.active);
+    portalState.keys = Array.isArray(state.portalState.keys) ? state.portalState.keys.slice() : [];
+    portalState.turnsRemaining = state.portalState.turnsRemaining ?? portalState.turnsRemaining;
+    portalState.nextSpawnTurn = state.portalState.nextSpawnTurn ?? portalState.nextSpawnTurn;
+  }
+
   // Master
   if (state.masterActive) applyMaster();
 
@@ -492,7 +517,7 @@ function getActionFromEvent(e) {
     const gridX = Math.floor(clickX / cellSize);
     const gridY = Math.floor(clickY / cellSize);
     if (gridX >= 0 && gridX < COLS && gridY >= 0 && gridY < ROWS) {
-      return { type: "game_click", x: gridX, y: gridY };
+      return { type: "game_click", x: gridX, y: gridY, playerIndex: localPlayerIndex };
     }
   }
 
@@ -502,7 +527,7 @@ function getActionFromEvent(e) {
   if (!clickable) return null;
 
   if (clickable.id) {
-    return { type: "dom_click", id: clickable.id };
+    return { type: "dom_click", id: clickable.id, playerIndex: localPlayerIndex };
   }
 
   const dataKeys = [
@@ -518,11 +543,19 @@ function getActionFromEvent(e) {
   for (const key of dataKeys) {
     const dataValue = clickable.dataset[key];
     if (dataValue) {
-      return { type: "dom_click", dataKey: key, dataValue };
+      return { type: "dom_click", dataKey: key, dataValue, playerIndex: localPlayerIndex };
     }
   }
 
   return null;
+}
+
+function shouldApplyHostAction(action) {
+  if (isHost) return true;
+  const hasLocal = typeof localPlayerIndex !== "undefined" && localPlayerIndex !== null;
+  const hasPlayerIndex = action && Object.prototype.hasOwnProperty.call(action, "playerIndex");
+  if (!hasPlayerIndex || !hasLocal) return true;
+  return action.playerIndex === localPlayerIndex;
 }
 
 function performHostAction(action) {
@@ -558,14 +591,23 @@ function performHostAction(action) {
 if (socket) {
   socket.on("role", payload => {
     isHost = Boolean(payload?.isHost);
-    localPlayerIndex = isHost ? 0 : 1;
+    if (payload && typeof payload.playerIndex === "number") {
+      localPlayerIndex = payload.playerIndex;
+    } else {
+      localPlayerIndex = isHost ? 0 : 1;
+    }
+    if (typeof updatePlayerResources === "function" && Array.isArray(players)) {
+      players.forEach((_, idx) => updatePlayerResources(idx));
+    }
     if (isHost) {
       setTimeout(() => emitStateNow(true), 0);
     }
   });
 
   socket.on("hostAction", action => {
-    performHostAction(action);
+    if (shouldApplyHostAction(action)) {
+      performHostAction(action);
+    }
     if (isHost) {
       setTimeout(() => emitStateNow(true), 0);
     }

@@ -28,6 +28,8 @@ const players = [
     trollClubCount: 0,
     flowerCount: 0,
     tokenCount: 0,
+    ballistaCount: 0,
+    boltCount: 0,
     ringCount: 0,
     terrorRingCount: 0,
     rainbowStoneCount: 0,
@@ -61,6 +63,8 @@ const players = [
     trollClubCount: 0,
     flowerCount: 0,
     tokenCount: 0,
+    ballistaCount: 0,
+    boltCount: 0,
     ringCount: 0,
     terrorRingCount: 0,
     rainbowStoneCount: 0,
@@ -70,6 +74,37 @@ const players = [
     barbarianRewards: {r5: false, r10: false, r20: false}
   }
 ];
+const PLAYER_VISIBILITY_RANGE = 5;
+
+function getLocalPlayerIndex() {
+  return typeof localPlayerIndex !== "undefined" && localPlayerIndex !== null
+    ? localPlayerIndex
+    : null;
+}
+
+function isPlayerInfoHidden(targetIndex) {
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null || localIndex === targetIndex) return false;
+  const localPlayer = players[localIndex];
+  const targetPlayer = players[targetIndex];
+  if (!localPlayer || !targetPlayer) return false;
+  const dist = Math.abs(localPlayer.x - targetPlayer.x) + Math.abs(localPlayer.y - targetPlayer.y);
+  return dist > PLAYER_VISIBILITY_RANGE;
+}
+
+function maskPlayerPanel(panel) {
+  if (!panel) return;
+  panel.querySelectorAll('[data-stat]').forEach(node => {
+    node.textContent = "??";
+  });
+  panel.querySelectorAll('[data-income]').forEach(node => {
+    node.textContent = "+?";
+  });
+  const negativeSpan = panel.querySelector('[data-stat="negative-buffs"]');
+  if (negativeSpan) negativeSpan.textContent = "Скрыто";
+  const positiveSpan = panel.querySelector('[data-stat="positive-buffs"]');
+  if (positiveSpan) positiveSpan.textContent = "Скрыто";
+}
 const pawns = players.map((player, index) => {
   const pawn = document.createElement("div");
   pawn.className = "pawn";
@@ -86,7 +121,7 @@ const pawns = players.map((player, index) => {
 });
 const MAGE_SLOW_COST = 750;
 const MAGE_NO_DOUBLE_COST = 750;
-const MAGE_POISON_COST = 4000;
+const MAGE_POISON_COST = 5500;
 const MAGE_SLOW_DURATION = 15;
 const MAGE_NO_DOUBLE_DURATION = 15;
 const MAGE_SLOW_PENALTY = 3;
@@ -100,6 +135,12 @@ let pendingGuardMove = null;
 let pendingGuardPlayerIndex = null;
 const POTION_INVIS_TURNS = 25;
 const POTION_LUCK_TURNS = 25;
+const BALLISTA_COST = 1000;
+const BOLT_COST = 150;
+const BALLISTA_RANGE = 11;
+const BALLISTA_DAMAGE_MIN = 13;
+const BALLISTA_DAMAGE_MAX = 17;
+let ballistaModePlayerIndex = null;
 const INVENTORY_ITEMS = [
   {key: "poison", label: "Яд", icon: "poison.png", count: player => player.poisonCount || 0},
   {key: "potion-invis", label: "Зелье невидимости", icon: "potion_invis.png", count: player => player.invisPotionCount || 0, useAction: "potion-invis"},
@@ -107,6 +148,8 @@ const INVENTORY_ITEMS = [
   {key: "clover", label: "Клевер", icon: "clover.png", count: player => player.cloverCount || 0},
   {key: "flower", label: "Таинственный цветок", icon: "mystic_flower.png", count: player => player.flowerCount || 0},
   {key: "token", label: "Жетон", icon: "token.png", count: player => player.tokenCount || 0},
+  {key: "ballista", label: "Баллиста", icon: "ballista.png", count: player => player.ballistaCount || 0, useAction: "ballista"},
+  {key: "bolt", label: "Болт", icon: "ballista_bolt.png", count: player => player.boltCount || 0},
   {key: "ring", label: "Кольцо убеждения", icon: "ring_persuasion.png", count: player => player.ringCount || 0},
   {key: "terror-ring", label: "Кольцо ужаса", icon: "ring_terror.png", count: player => player.terrorRingCount || 0},
   {key: "rainbow-stone", label: "Радужный камень", icon: "rainbow_stone.png", count: player => player.rainbowStoneCount || 0},
@@ -118,6 +161,19 @@ const INVENTORY_ITEMS = [
 function applyPotion(playerIndex, type) {
   const player = players[playerIndex];
   if (!player) return;
+  if (type === "ballista") {
+    if (playerIndex !== currentPlayerIndex) return;
+    if ((player.ballistaCount || 0) <= 0) return;
+    if ((player.boltCount || 0) <= 0) {
+      showPickupToast("Нет болтов для баллисты.");
+      return;
+    }
+    ballistaModePlayerIndex = playerIndex;
+    showPickupToast("Режим баллисты активирован. Выберите цель.");
+    showBallistaRange();
+    updateInventory(playerIndex);
+    return;
+  }
   if (type === "potion-invis") {
     if ((player.invisPotionCount || 0) <= 0) return;
     player.invisPotionCount -= 1;
@@ -134,12 +190,64 @@ function applyPotion(playerIndex, type) {
   updateInventory(playerIndex);
 }
 
+function cancelBallistaMode(playerIndex) {
+  if (ballistaModePlayerIndex !== playerIndex) return;
+  ballistaModePlayerIndex = null;
+  clearReachable();
+  showReachable();
+  updateInventory(playerIndex);
+  showPickupToast("Режим баллисты отменен.");
+}
+
+function tryBallistaShot(gridX, gridY) {
+  if (ballistaModePlayerIndex === null) return false;
+  if (ballistaModePlayerIndex !== currentPlayerIndex) return false;
+  const attacker = players[ballistaModePlayerIndex];
+  if (!attacker) return true;
+  const targetIndex = players.findIndex(
+    (p, idx) => idx !== ballistaModePlayerIndex && p.x === gridX && p.y === gridY
+  );
+  if (targetIndex === -1) {
+    showPickupToast("Выберите игрока для выстрела.");
+    return true;
+  }
+  const dist = Math.abs(attacker.x - gridX) + Math.abs(attacker.y - gridY);
+  if (dist > BALLISTA_RANGE) {
+    showPickupToast("Цель слишком далеко для баллисты.");
+    return true;
+  }
+  if ((attacker.boltCount || 0) <= 0) {
+    showPickupToast("Нет болтов для баллисты.");
+    cancelBallistaMode(ballistaModePlayerIndex);
+    return true;
+  }
+  const target = players[targetIndex];
+  const damage = Math.floor(Math.random() * (BALLISTA_DAMAGE_MAX - BALLISTA_DAMAGE_MIN + 1)) + BALLISTA_DAMAGE_MIN;
+  const beforeArmy = Math.max(0, target.pocket.army || 0);
+  const killed = Math.min(beforeArmy, damage);
+  target.pocket.army = beforeArmy - killed;
+  attacker.boltCount -= 1;
+  updatePlayerResources(ballistaModePlayerIndex);
+  updatePlayerResources(targetIndex);
+  updateInventory(ballistaModePlayerIndex);
+  showPickupToast(`Баллиста: -${killed} войск в кармане противника.`);
+  ballistaModePlayerIndex = null;
+  endTurn();
+  return true;
+}
+
 function updateInventory(playerIndex) {
   const panel = inventoryPanels[playerIndex];
   const player = players[playerIndex];
   if (!panel || !player) return;
+  const hidden = isPlayerInfoHidden(playerIndex);
+  panel.classList.toggle("info-hidden", hidden);
   const itemsRoot = panel.querySelector(".inventory-items");
   if (!itemsRoot) return;
+  if (hidden) {
+    itemsRoot.innerHTML = '<div class="inventory-empty">Скрыто</div>';
+    return;
+  }
   itemsRoot.innerHTML = "";
   INVENTORY_ITEMS.forEach(item => {
     const count = item.count ? item.count(player) : 0;
@@ -158,8 +266,13 @@ function updateInventory(playerIndex) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "inventory-use";
-      btn.textContent = "Применить";
-      btn.addEventListener("click", () => applyPotion(playerIndex, item.useAction));
+      if (item.useAction === "ballista" && ballistaModePlayerIndex === playerIndex) {
+        btn.textContent = "Отменить";
+        btn.addEventListener("click", () => cancelBallistaMode(playerIndex));
+      } else {
+        btn.textContent = "Применить";
+        btn.addEventListener("click", () => applyPotion(playerIndex, item.useAction));
+      }
       entry.appendChild(btn);
     }
     itemsRoot.appendChild(entry);
@@ -170,6 +283,13 @@ function updatePlayerResources(playerIndex) {
   const player = players[playerIndex];
   const panel = playerPanels[playerIndex];
   if (!player || !panel) return;
+  const hidden = isPlayerInfoHidden(playerIndex);
+  panel.classList.toggle("info-hidden", hidden);
+  if (hidden) {
+    maskPlayerPanel(panel);
+    updateInventory(playerIndex);
+    return;
+  }
   panel.querySelector('[data-stat="gold"]').textContent = player.resources.gold;
   panel.querySelector('[data-stat="army"]').textContent = player.resources.army;
   panel.querySelector('[data-stat="influence"]').textContent = player.resources.influence;
@@ -240,6 +360,10 @@ players.forEach((_, index) => {
 });
 
 function showPickupToast(text) {
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex !== null && localIndex !== currentPlayerIndex) {
+    return;
+  }
   pickupText.textContent = text;
   pickupToast.style.display = "flex";
   if (toastTimer) clearTimeout(toastTimer);
@@ -299,7 +423,7 @@ const testModeBtn = document.getElementById("testModeBtn");
 const disableTestModeBtn = document.getElementById("disableTestModeBtn");
 const disableRobbersBtn = document.getElementById("disableRobbersBtn");
 const enableRobbersBtn = document.getElementById("enableRobbersBtn");
-let robbersEnabled = true;
+let robbersEnabled = false;
 
 function showWorldDangerModal() {
   if (!worldDangerModal) return;
@@ -731,7 +855,7 @@ if (masterBuyTerrorRing) {
     if (!player || (player.ringCount || 0) <= 0) return;
     player.ringCount -= 1;
     player.terrorRingCount = (player.terrorRingCount || 0) + 1;
-    player.attack += 15;
+    player.attack += 8;
     updatePlayerResources(pendingMasterPlayerIndex);
     showPickupToast("Кольцо ужаса получено.");
     flashPrice(masterBuyTerrorRing, 1, "assets/icons/ring_persuasion.png", "Кольцо убеждения");
@@ -809,19 +933,19 @@ function disableTestMode() {
 }
 
 function updateRobberToggleButtons() {
-  if (disableRobbersBtn) disableRobbersBtn.disabled = !robbersEnabled;
-  if (enableRobbersBtn) enableRobbersBtn.disabled = robbersEnabled;
+  if (disableRobbersBtn) disableRobbersBtn.disabled = true;
+  if (enableRobbersBtn) enableRobbersBtn.disabled = true;
 }
 
 function setRobbersEnabled(nextValue) {
-  robbersEnabled = Boolean(nextValue);
+  robbersEnabled = false;
   if (!robbersEnabled) {
     robberEvent = null;
     robberAmbushThisSession = false;
     hideRobberModal();
   }
   updateRobberToggleButtons();
-  showPickupToast(robbersEnabled ? "Разбойники возвращены." : "Разбойники отключены.");
+  showPickupToast("Разбойники отключены.");
   if (typeof emitStateNow === "function") {
     emitStateNow(true);
   }
@@ -891,8 +1015,13 @@ const mercenaries = [];
 let mercenaryIdCounter = 1;
 const thieves = [];
 let thiefIdCounter = 1;
-const THIEF_SPEED = 5;
+const cutthroats = [];
+let cutthroatIdCounter = 1;
+const THIEF_SPEED = 7;
 const THIEF_CASTLE_GOLD_LOSS = 1000;
+const CUTTHROAT_SPEED = 5;
+const CUTTHROAT_STRENGTH = 20;
+const CUTTHROAT_COST = 1000;
 let repairPending = null;
 let gameEnded = false;
 
@@ -1284,6 +1413,25 @@ function clearMercenaryCell(x, y) {
   setCellToInactive(x, y);
 }
 
+function getCutthroatAtKey(key) {
+  return cutthroats.find(entry => entry.key === key) || null;
+}
+
+function setCellToCutthroat(x, y) {
+  const key = `${x},${y}`;
+  const cell = grid[key];
+  if (!cell) return false;
+  cell.classList.remove("inactive");
+  cell.classList.add("important", "cutthroat");
+  cell.textContent = "";
+  setCellIcon(cell, "cutthroat.png", "Головорезы");
+  return true;
+}
+
+function clearCutthroatCell(x, y) {
+  setCellToInactive(x, y);
+}
+
 function getThiefAtKey(key) {
   return thieves.find(entry => entry.key === key) || null;
 }
@@ -1408,6 +1556,35 @@ function spawnThief(playerIndex) {
   return true;
 }
 
+function spawnCutthroat(playerIndex) {
+  const spawnPos = findHireSpawnCell();
+  if (!spawnPos) {
+    showPickupToast("Нет места рядом для наемников.");
+    return false;
+  }
+  const player = players[playerIndex];
+  const cost = getDiscountedGoldCost(player, CUTTHROAT_COST);
+  if (getTotalGold(player) < cost) {
+    showPickupToast("Не хватает золота.");
+    return false;
+  }
+  spendGold(player, cost);
+  updatePlayerResources(playerIndex);
+  const key = `${spawnPos.x},${spawnPos.y}`;
+  setCellToCutthroat(spawnPos.x, spawnPos.y);
+  cutthroats.push({
+    id: cutthroatIdCounter++,
+    key,
+    x: spawnPos.x,
+    y: spawnPos.y,
+    ownerIndex: playerIndex,
+    targetPlayerIndex: getOpponentIndex(playerIndex),
+    strength: CUTTHROAT_STRENGTH
+  });
+  showPickupToast("Головорезы отправлены.");
+  return true;
+}
+
 function openHire(playerIndex) {
   hirePlayerIndex = playerIndex;
   const player = players[playerIndex];
@@ -1415,6 +1592,7 @@ function openHire(playerIndex) {
   const costLumber = getDiscountedGoldCost(player, 500);
   const costMine = getDiscountedGoldCost(player, 750);
   const costClay = getDiscountedGoldCost(player, 1200);
+  const costCutthroat = getDiscountedGoldCost(player, CUTTHROAT_COST);
   const hasEnemyCastle = Boolean(findEnemyCastleKey(playerIndex));
   hireButtons.forEach(btn => {
     const type = btn.getAttribute("data-hire");
@@ -1423,6 +1601,7 @@ function openHire(playerIndex) {
     if (type === "mine") btn.disabled = gold < costMine || !hasTarget;
     if (type === "clay") btn.disabled = gold < costClay || !hasTarget;
     if (type === "thief") btn.disabled = (player.tokenCount || 0) < 1 || !hasEnemyCastle;
+    if (type === "cutthroat") btn.disabled = gold < costCutthroat;
     if (type === "lumber") setTradePrice(btn, goldPriceHtml(costLumber));
     if (type === "mine") setTradePrice(btn, goldPriceHtml(costMine));
     if (type === "clay") setTradePrice(btn, goldPriceHtml(costClay));
@@ -1432,6 +1611,7 @@ function openHire(playerIndex) {
         '<img class="price-icon" src="assets/icons/token.png" alt="Жетон" />Цена: 1 жетон'
       );
     }
+    if (type === "cutthroat") setTradePrice(btn, goldPriceHtml(costCutthroat));
   });
   hireModal.style.display = "flex";
 }
@@ -1454,6 +1634,7 @@ hireModal.addEventListener("click", (e) => {
       const costLumber = getDiscountedGoldCost(player, 500);
       const costMine = getDiscountedGoldCost(player, 750);
       const costClay = getDiscountedGoldCost(player, 1200);
+      const costCutthroat = getDiscountedGoldCost(player, CUTTHROAT_COST);
       if (type === "lumber") {
       const ok = spawnMercenary(hirePlayerIndex, "lumber", 15, 500);
       if (ok) flashPrice(btn, costLumber, "assets/icons/icon-gold.png", "Золото");
@@ -1470,6 +1651,10 @@ hireModal.addEventListener("click", (e) => {
       const ok = spawnThief(hirePlayerIndex);
       if (ok) flashPrice(btn, 1, "assets/icons/token.png", "Жетон");
       }
+      if (type === "cutthroat") {
+      const ok = spawnCutthroat(hirePlayerIndex);
+      if (ok) flashPrice(btn, costCutthroat, "assets/icons/icon-gold.png", "Золото");
+      }
       openHire(hirePlayerIndex);
     });
   });
@@ -1482,12 +1667,12 @@ function openRepairModal(entry, playerIndex) {
     cost = 25;
     label = "лесопилку";
   }
-  if (entry.featureKey === "mine") {
-    cost = 50;
+    if (entry.featureKey === "mine") {
+      cost = 100;
     label = "шахту";
   }
-  if (entry.featureKey === "clay") {
-    cost = 100;
+    if (entry.featureKey === "clay") {
+      cost = 150;
     label = "глиняный карьер";
   }
   const player = players[playerIndex];
@@ -1712,7 +1897,67 @@ function isThiefStepAllowed(nx, ny, targetKey) {
   if (players.some(p => p.x === nx && p.y === ny)) return false;
   if (mercenaries.some(m => m.key === key)) return false;
   if (thieves.some(t => t.key === key)) return false;
+  if (cutthroats.some(c => c.key === key)) return false;
   return true;
+}
+
+function isCutthroatStepAllowed(nx, ny, targetKey) {
+  const key = `${nx},${ny}`;
+  if (blockedCellKeys.has(key)) return false;
+  if (key === targetKey) return true;
+  const cell = grid[key];
+  if (!cell || !cell.classList.contains("inactive")) return false;
+  if (resourceByPos[key]) return false;
+  if (specialByPos[key]) return false;
+  if (players.some(p => p.x === nx && p.y === ny)) return false;
+  if (mercenaries.some(m => m.key === key)) return false;
+  if (thieves.some(t => t.key === key)) return false;
+  if (cutthroats.some(c => c.key === key)) return false;
+  return true;
+}
+
+function findCutthroatPath(startKey, targetKey, maxDepth = 25) {
+  const [sx, sy] = startKey.split(",").map(Number);
+  const queue = [{ x: sx, y: sy }];
+  const prev = new Map();
+  const startId = `${sx},${sy}`;
+  prev.set(startId, null);
+  const dirs = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 }
+  ];
+  let depth = 0;
+  while (queue.length && depth <= maxDepth) {
+    const nextQueue = [];
+    for (const node of queue) {
+      const key = `${node.x},${node.y}`;
+      if (key === targetKey) {
+        const path = [];
+        let cur = key;
+        while (cur && cur !== startId) {
+          path.push(cur);
+          cur = prev.get(cur);
+        }
+        path.reverse();
+        return path;
+      }
+      for (const { dx, dy } of dirs) {
+        const nx = node.x + dx;
+        const ny = node.y + dy;
+        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+        const nkey = `${nx},${ny}`;
+        if (prev.has(nkey)) continue;
+        if (!isCutthroatStepAllowed(nx, ny, targetKey)) continue;
+        prev.set(nkey, key);
+        nextQueue.push({ x: nx, y: ny });
+      }
+    }
+    queue.splice(0, queue.length, ...nextQueue);
+    depth += 1;
+  }
+  return null;
 }
 
 function findThiefPath(startKey, targetKey, maxDepth = 25) {
@@ -1748,7 +1993,7 @@ function findThiefPath(startKey, targetKey, maxDepth = 25) {
         if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
         const nkey = `${nx},${ny}`;
         if (prev.has(nkey)) continue;
-        if (!isThiefStepAllowed(nx, ny, targetKey)) continue;
+    if (!isThiefStepAllowed(nx, ny, targetKey)) continue;
         prev.set(nkey, key);
         nextQueue.push({ x: nx, y: ny });
       }
@@ -1787,6 +2032,51 @@ function moveThief(thief) {
     if (reachedTarget && targetIsCastle) break;
     setCellToThief(nx, ny);
     if (reachedTarget) break;
+  }
+}
+
+function moveCutthroat(cutthroat) {
+  const targetPlayer = players[cutthroat.targetPlayerIndex];
+  if (!targetPlayer) return;
+  const targetKey = `${targetPlayer.x},${targetPlayer.y}`;
+  if (cutthroat.key === targetKey) return;
+  const path = findCutthroatPath(cutthroat.key, targetKey, 80);
+  if (!path || path.length === 0) return;
+  const steps = Math.min(CUTTHROAT_SPEED, path.length);
+  clearCutthroatCell(cutthroat.x, cutthroat.y);
+  for (let i = 0; i < steps; i++) {
+    const [nx, ny] = path[i].split(",").map(Number);
+    cutthroat.x = nx;
+    cutthroat.y = ny;
+    cutthroat.key = `${nx},${ny}`;
+    if (cutthroat.key === targetKey) break;
+  }
+  if (cutthroat.key !== targetKey) {
+    setCellToCutthroat(cutthroat.x, cutthroat.y);
+  }
+}
+
+function advanceCutthroats() {
+  for (let i = cutthroats.length - 1; i >= 0; i--) {
+    const cutthroat = cutthroats[i];
+    const targetPlayer = players[cutthroat.targetPlayerIndex];
+    if (!targetPlayer) {
+      clearCutthroatCell(cutthroat.x, cutthroat.y);
+      cutthroats.splice(i, 1);
+      continue;
+    }
+    const targetKey = `${targetPlayer.x},${targetPlayer.y}`;
+    moveCutthroat(cutthroat);
+    if (cutthroat.key === targetKey) {
+      const beforeArmy = Math.max(0, targetPlayer.pocket.army || 0);
+      const rawDamage = Math.floor(Math.random() * (23 - 18 + 1)) + 18;
+      const killed = Math.min(beforeArmy, rawDamage);
+      targetPlayer.pocket.army = beforeArmy - killed;
+      updatePlayerResources(cutthroat.targetPlayerIndex);
+      showPickupToast(`Головорезы убили ${killed} войск игрока ${targetPlayer.id + 1}`);
+      clearCutthroatCell(cutthroat.x, cutthroat.y);
+      cutthroats.splice(i, 1);
+    }
   }
 }
 
@@ -2208,10 +2498,15 @@ function resolveTrollBattle(playerIndex, trollArmy) {
   const playerWon = winnerIndex === playerIndex;
   if (playerWon) {
     player.trollClubCount = (player.trollClubCount || 0) + 1;
-    player.tokenCount = (player.tokenCount || 0) + 1;
-    player.attack += 25;
-    showPickupToast("Вы получили Дубинку троллей: +25 атаки.");
-    showPickupToast("Вы получили Жетон.");
+    const gotToken = Math.random() < 0.5;
+    if (gotToken) {
+      player.tokenCount = (player.tokenCount || 0) + 1;
+    }
+    player.attack += 8;
+    showPickupToast("Вы получили Дубинку троллей: +8 атаки.");
+    if (gotToken) {
+      showPickupToast("Вы получили Жетон.");
+    }
   }
   updatePlayerResources(playerIndex);
   return {
@@ -2674,10 +2969,34 @@ function buildBattleSummaryLines(result) {
     return lines;
   }
 
+function shouldShowBattleForLocal(result) {
+  if (!result) return false;
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null) return true;
+  const keys = [
+    "attackerIndex",
+    "defenderIndex",
+    "playerIndex",
+    "winnerIndex",
+    "loserIndex",
+    "targetPlayerIndex"
+  ];
+  let hasIndex = false;
+  for (const key of keys) {
+    if (typeof result[key] === "number") {
+      hasIndex = true;
+      if (result[key] === localIndex) return true;
+    }
+  }
+  if (hasIndex) return false;
+  return localIndex === currentPlayerIndex;
+}
+
 function showBattleModal(result, force = false) {
   if (!battleModal || !battleSummary || !result) return;
   const inMultiplayer = typeof socket !== "undefined" && socket;
-  if (inMultiplayer && !force && !isHost) return;
+  if (inMultiplayer && !force && !shouldShowBattleForLocal(result)) return;
+  if (inMultiplayer && force && !shouldShowBattleForLocal(result)) return;
   if (!force) {
     const snapshot = JSON.parse(JSON.stringify(result));
     lastBattleResult = snapshot;
@@ -2730,6 +3049,13 @@ function refreshCastleModal(key, playerIndex) {
   castleUpgradeBtn.disabled = stats.level >= 3 || playerResources < upgradeCost;
   if (castleUpgradeCostLabel) {
     castleUpgradeCostLabel.textContent = String(upgradeCost);
+  }
+  if (ballistaBuyBtn) {
+    const hasBallista = player ? (player.ballistaCount || 0) > 0 : false;
+    ballistaBuyBtn.disabled = !player || hasBallista || playerResources < BALLISTA_COST;
+  }
+  if (boltBuyBtn) {
+    boltBuyBtn.disabled = !player || playerResources < BOLT_COST;
   }
     castleFeatureButtons.forEach(btn => {
       const feature = btn.dataset.castleFeature;
@@ -2842,6 +3168,37 @@ function applySpecialFeatureIcon(x, y, featureKey) {
       buyCastleFeature(feature);
     });
   });
+  if (ballistaBuyBtn) {
+    ballistaBuyBtn.addEventListener("click", () => {
+      if (!castleModalKey || castleModalPlayerIndex === null) return;
+      const player = players[castleModalPlayerIndex];
+      if (!player) return;
+      if ((player.ballistaCount || 0) >= 1) return;
+      if (player.resources.resources < BALLISTA_COST) return;
+      player.resources.resources -= BALLISTA_COST;
+      player.ballistaCount = 1;
+      updatePlayerResources(castleModalPlayerIndex);
+      updateInventory(castleModalPlayerIndex);
+      refreshCastleModal(castleModalKey, castleModalPlayerIndex);
+      showPickupToast("Куплена Баллиста.");
+      flashPrice(ballistaBuyBtn, BALLISTA_COST, "assets/icons/icon-resources.png", "Ресурсы");
+    });
+  }
+  if (boltBuyBtn) {
+    boltBuyBtn.addEventListener("click", () => {
+      if (!castleModalKey || castleModalPlayerIndex === null) return;
+      const player = players[castleModalPlayerIndex];
+      if (!player) return;
+      if (player.resources.resources < BOLT_COST) return;
+      player.resources.resources -= BOLT_COST;
+      player.boltCount = (player.boltCount || 0) + 1;
+      updatePlayerResources(castleModalPlayerIndex);
+      updateInventory(castleModalPlayerIndex);
+      refreshCastleModal(castleModalKey, castleModalPlayerIndex);
+      showPickupToast("Куплен Болт для баллисты.");
+      flashPrice(boltBuyBtn, BOLT_COST, "assets/icons/icon-resources.png", "Ресурсы");
+    });
+  }
 
   if (castleDepositBtn) {
     castleDepositBtn.addEventListener("click", () => {
@@ -2923,6 +3280,7 @@ function updatePawn(player, index) {
 }
 function updatePawns() {
   players.forEach(updatePawn);
+  players.forEach((_, idx) => updatePlayerResources(idx));
 }
 updatePawns();
 
@@ -2996,6 +3354,7 @@ const MOVES_DIRS = [
 
 function showReachable() {
   clearReachable();
+  if (ballistaModePlayerIndex === currentPlayerIndex) return;
   if (movesRemaining <= 0) return;
   const currentPlayer = players[currentPlayerIndex];
   const queue = [{x: currentPlayer.x, y: currentPlayer.y, steps: 0}];
@@ -3124,7 +3483,7 @@ function finalizeMove(gridX, gridY) {
     if (currentPlayer.invisTurnsRemaining > 0) {
       showPickupToast("Невидимость: тролли вас не атакуют.");
     } else {
-      const trollArmy = 60;
+      const trollArmy = 25;
       const battleResult = resolveTrollBattle(currentPlayerIndex, trollArmy);
       if (battleResult && battleResult.winnerIndex === currentPlayerIndex) {
         if (typeof handleTrollDefeat === "function") {
@@ -3139,6 +3498,21 @@ function finalizeMove(gridX, gridY) {
   const specialEntry = specialByPos[key];
   if (specialEntry && specialEntry.disabled && specialEntry.ownerIndex === currentPlayerIndex) {
     openRepairModal({ ...specialEntry, key }, currentPlayerIndex);
+  }
+  if (specialEntry && specialEntry.type === "portal") {
+    const otherKey = typeof getOtherPortalKey === "function" ? getOtherPortalKey(key) : null;
+    if (otherKey) {
+      const [tx, ty] = otherKey.split(",").map(Number);
+      if (typeof clearPortalPair === "function") {
+        clearPortalPair();
+      }
+      currentPlayer.x = tx;
+      currentPlayer.y = ty;
+      updatePawns();
+      showPickupToast("Портал перенес вас.");
+      endTurn();
+      return;
+    }
   }
   if (specialEntry && specialEntry.type === "troll-cave") {
     const trollInCave = typeof isTrollInCaveAtKey === "function" && isTrollInCaveAtKey(key);
@@ -3283,7 +3657,25 @@ function updateTurnUI() {
   }
 }
 
+function showBallistaRange() {
+  clearReachable();
+  const currentPlayer = players[currentPlayerIndex];
+  if (!currentPlayer) return;
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const dist = Math.abs(x - currentPlayer.x) + Math.abs(y - currentPlayer.y);
+      if (dist === 0 || dist > BALLISTA_RANGE) continue;
+      const key = `${x},${y}`;
+      const cell = grid[key];
+      if (!cell) continue;
+      cell.classList.add("reachable");
+      reachableKeys.add(key);
+    }
+  }
+}
+
 function endTurn() {
+  ballistaModePlayerIndex = null;
   tickAllTimedBuffs();
   collectCastleIncomes(currentPlayerIndex);
   turnCounter += 1;
@@ -3299,6 +3691,7 @@ function endTurn() {
   handleBarbarianRespawns();
   advanceMercenaries();
   advanceThieves();
+  advanceCutthroats();
   movesRemaining = 0;
   lastRoll = null;
   lastRollText = "-";
@@ -3327,7 +3720,13 @@ function endTurn() {
     handleCloverTimers();
   }
   handleStoneTimers();
+  if (typeof handlePortalTimers === "function") {
+    handlePortalTimers();
+  }
   handleStoneSpawns();
+  if (typeof handlePortalSpawns === "function") {
+    handlePortalSpawns();
+  }
   if (typeof handleCloverSpawns === "function") {
     handleCloverSpawns();
   }
@@ -3452,7 +3851,7 @@ function resetGameState() {
   worldDangerShown = false;
   robberEvent = null;
   robberAmbushThisSession = false;
-  robbersEnabled = true;
+  robbersEnabled = false;
   lastBattleResult = null;
   lastBattleId = 0;
   testModeEnabled = false;
@@ -3491,6 +3890,8 @@ function resetGameState() {
     player.trollClubCount = 0;
     player.flowerCount = 0;
     player.tokenCount = 0;
+    player.ballistaCount = 0;
+    player.boltCount = 0;
     player.ringCount = 0;
     player.terrorRingCount = 0;
     player.rainbowStoneCount = 0;
@@ -3566,8 +3967,11 @@ function resetGameState() {
     barbarianRespawnTimers.length = 0;
     mercenaries.length = 0;
     thieves.length = 0;
+    cutthroats.length = 0;
   }
   thieves.length = 0;
+  cutthroats.length = 0;
+  cutthroatIdCounter = 1;
 
   Object.keys(castleOwnersByKey).forEach(key => {
     castleOwnersByKey[key] = undefined;
@@ -3596,6 +4000,7 @@ function resetGameState() {
   if (typeof initStoneSpawns === "function") initStoneSpawns();
   if (typeof initCloverSpawns === "function") initCloverSpawns();
   if (typeof initRainbowSpawns === "function") initRainbowSpawns();
+  if (typeof initPortalState === "function") initPortalState();
 
   if (typeof mageSlot !== "undefined") {
     mageSlot.active = false;
