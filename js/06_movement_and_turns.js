@@ -23,7 +23,12 @@ game.addEventListener("click", e => {
     openContextForKey(key, currentPlayerIndex);
     return;
   }
-  if (movesRemaining <= 0) {
+  const authMovesRemaining = (typeof lastAuthState !== "undefined" &&
+    lastAuthState &&
+    typeof lastAuthState.movesRemaining === "number")
+    ? lastAuthState.movesRemaining
+    : movesRemaining;
+  if (authMovesRemaining <= 0) {
     return;
   }
   if (!reachableKeys.has(key)) return;
