@@ -1150,8 +1150,7 @@ function spawnPortalPair() {
     const y = Number(parts[1]);
     const dx = Math.abs(x - fx);
     const dy = Math.abs(y - fy);
-    if (dx === 0 || dy === 0) return true;
-    return Math.hypot(dx, dy) >= 15;
+    return (dx + dy) >= 18;
   });
   if (eligibleByDistance.length === 0) return false;
   const secondKey = eligibleByDistance[Math.floor(Math.random() * eligibleByDistance.length)];
@@ -1160,7 +1159,7 @@ function spawnPortalPair() {
     const [xStr, yStr] = key.split(",");
     const x = Number(xStr);
     const y = Number(yStr);
-    const success = setSpecialCell(x, y, "ПОРТАЛ", "portal", null, null, null, { type: "portal" });
+    const success = setSpecialCell(x, y, "", "portal", null, null, null, { type: "portal" });
     if (!success) return;
     const cell = grid[key];
     if (cell) {

@@ -895,7 +895,7 @@ function applyState(state) {
     lastReachableFingerprint = reachableFingerprint;
     clearReachable();
     reachableKeys = new Set(reachableList);
-    if (shouldShowReachable) {
+    if (shouldShowReachable && typeof canLocalAct === "function" && canLocalAct()) {
       showReachable();
     }
   }
