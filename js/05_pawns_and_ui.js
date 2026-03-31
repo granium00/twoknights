@@ -87,7 +87,12 @@ function canLocalAct() {
   if (!inMultiplayer) return true;
   const localIndex = getLocalPlayerIndex();
   if (localIndex === null) return false;
-  return localIndex === currentPlayerIndex;
+  const authTurn = (typeof lastAuthState !== "undefined" &&
+    lastAuthState &&
+    typeof lastAuthState.currentPlayerIndex === "number")
+    ? lastAuthState.currentPlayerIndex
+    : currentPlayerIndex;
+  return localIndex === authTurn;
 }
 
 function isPlayerInfoHidden(targetIndex) {
