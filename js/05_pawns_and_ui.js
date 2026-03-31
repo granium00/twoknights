@@ -3465,12 +3465,12 @@ function finalizeMove(gridX, gridY) {
     if (castleOwnersByKey[castleKey] === currentPlayerIndex) {
       depositPocketCurrencyToPlayer(currentPlayerIndex);
       recalcPlayerResourceIncome(currentPlayerIndex);
-        modalOpened = true;
-        showCastleModal(castleKey, currentPlayerIndex);
+      modalOpened = true;
+      showCastleModal(castleKey, currentPlayerIndex);
     }
   }
   const dragonKey = getDragonBaseKeyForPos(gridX, gridY);
-    if (dragonKey) {
+  if (dragonKey) {
       if (!currentPlayer.hasSword) {
         showPickupToast("Без меча героя нельзя вступить в бой с драконом.");
         endTurn(true);
@@ -3478,14 +3478,13 @@ function finalizeMove(gridX, gridY) {
       }
       const battleResult = resolveDragonBattle(currentPlayerIndex, 50);
       modalOpened = true;
-      modalOpened = true;
       showBattleModal(battleResult);
-    if (battleResult && battleResult.winnerIndex === currentPlayerIndex) {
-      showGameOver(currentPlayerIndex);
+      if (battleResult && battleResult.winnerIndex === currentPlayerIndex) {
+        showGameOver(currentPlayerIndex);
+      }
+      endTurn();
+      return;
     }
-    endTurn();
-    return;
-  }
   const barbarianCell = barbarianCells.find(cell => cell.key === key);
   if (barbarianCell) {
     const battleResult = resolveBarbarianBattle(currentPlayerIndex, barbarianCell);
@@ -3494,6 +3493,7 @@ function finalizeMove(gridX, gridY) {
     }
     removeBarbarianCell(key);
     scheduleBarbarianRespawn();
+    modalOpened = true;
     showBattleModal(battleResult);
     endTurn();
     return;
@@ -3510,6 +3510,7 @@ function finalizeMove(gridX, gridY) {
           handleTrollDefeat();
         }
       }
+      modalOpened = true;
       showBattleModal(battleResult);
       endTurn();
       return;
@@ -3639,7 +3640,11 @@ function finalizeMove(gridX, gridY) {
       clearClover();
     }
   }
-  endTurn();
+  if (!modalOpened) {
+    endTurn(true);
+  } else {
+    endTurn();
+  }
 }
 
 function updateTurnUI() {
