@@ -62,9 +62,11 @@ const io = new Server(server, {
 let hostId = null;
 let latestState = null;
 let authoritativeState = createAuthoritativeState();
+let authActive = false;
 const playerAssignments = new Map();
 
 function syncAuthoritativeFromLegacy(state) {
+  if (authActive) return;
   if (!state) return;
   if (typeof state.currentPlayerIndex === "number") {
     authoritativeState.currentPlayerIndex = state.currentPlayerIndex;
@@ -144,6 +146,7 @@ io.on("connection", socket => {
 
   socket.on("auth:action", action => {
     if (!action || typeof action.type !== "string") return;
+    authActive = true;
     const claimedPlayer = action.playerIndex;
     const assignedPlayer = playerAssignments.get(socket.id);
     if (typeof claimedPlayer === "number" && typeof assignedPlayer === "number") {
@@ -160,6 +163,7 @@ io.on("connection", socket => {
   });
 
   socket.on("auth:bootstrap", payload => {
+    authActive = true;
     authoritativeState = applyAuthoritativeAction(authoritativeState, {
       type: "bootstrap",
       state: payload

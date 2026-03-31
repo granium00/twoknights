@@ -47,6 +47,7 @@ function emitAuthAction(action) {
 function applyAuthState(state) {
   if (!state || applyingAuthState) return;
   applyingAuthState = true;
+  lastAuthState = state;
   if (typeof state.currentPlayerIndex === "number") {
     currentPlayerIndex = state.currentPlayerIndex;
   }
@@ -1176,7 +1177,6 @@ if (socket) {
   });
 
   socket.on("auth:state", state => {
-    lastAuthState = state;
     applyAuthState(state);
   });
 

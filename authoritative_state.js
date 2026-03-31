@@ -1,3 +1,6 @@
+const COLS = 30;
+const ROWS = 25;
+
 const DEFAULT_STATE = {
   version: 1,
   tick: 0,
@@ -59,18 +62,22 @@ function applyAuthoritativeAction(state, action) {
     }
     case "roll": {
       if (action.playerIndex !== state.currentPlayerIndex) return state;
-      if (typeof action.roll === "number") {
-        state.lastRoll = action.roll;
-        state.movesRemaining = action.roll;
-      }
-      if (typeof action.die1 === "number") state.lastDie1 = action.die1;
-      if (typeof action.die2 === "number") state.lastDie2 = action.die2;
+      let die1 = typeof action.die1 === "number" ? action.die1 : null;
+      let die2 = typeof action.die2 === "number" ? action.die2 : null;
+      if (die1 === null) die1 = Math.floor(Math.random() * 6) + 1;
+      if (die2 === null) die2 = Math.floor(Math.random() * 6) + 1;
+      const roll = typeof action.roll === "number" ? action.roll : die1 + die2;
+      state.lastDie1 = die1;
+      state.lastDie2 = die2;
+      state.lastRoll = roll;
+      state.movesRemaining = roll;
       state.tick += 1;
       return state;
     }
     case "move": {
       if (action.playerIndex !== state.currentPlayerIndex) return state;
       if (typeof action.x !== "number" || typeof action.y !== "number") return state;
+      if (action.x < 0 || action.x >= COLS || action.y < 0 || action.y >= ROWS) return state;
       if (state.movesRemaining <= 0) return state;
       const player = state.players[action.playerIndex];
       if (!player) return state;
