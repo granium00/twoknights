@@ -130,7 +130,12 @@ function applyAuthState(state) {
     } else {
       Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
     }
-    state.resourceByPos.forEach(entry => applyResourceEntry(entry));
+    const turnRef = typeof state.turnCounter === "number" ? state.turnCounter : turnCounter;
+    const filtered = state.resourceByPos.filter(entry => {
+      if (typeof entry.spawnedAtTurn !== "number") return true;
+      return (turnRef - entry.spawnedAtTurn) < 6;
+    });
+    filtered.forEach(entry => applyResourceEntry(entry));
   }
   players.forEach((_, idx) => updatePlayerResources(idx));
   updateTurnUI();
