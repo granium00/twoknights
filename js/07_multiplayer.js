@@ -21,6 +21,7 @@ let lastSentTurnIndex = null;
 const FULL_STATE_INTERVAL = 1000;
 let hasInitialFullBoard = false;
 let lastAuthState = null;
+let applyingAuthState = false;
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
 
@@ -41,6 +42,41 @@ function emitAuthBootstrap() {
 function emitAuthAction(action) {
   if (!socket) return;
   socket.emit("auth:action", action);
+}
+
+function applyAuthState(state) {
+  if (!state || applyingAuthState) return;
+  applyingAuthState = true;
+  if (typeof state.currentPlayerIndex === "number") {
+    currentPlayerIndex = state.currentPlayerIndex;
+  }
+  if (typeof state.movesRemaining === "number") {
+    movesRemaining = state.movesRemaining;
+  }
+  if (typeof state.lastRoll !== "undefined") {
+    lastRoll = state.lastRoll;
+  }
+  if (typeof state.lastDie1 !== "undefined") {
+    lastDie1 = state.lastDie1;
+  }
+  if (typeof state.lastDie2 !== "undefined") {
+    lastDie2 = state.lastDie2;
+  }
+  if (Array.isArray(state.players)) {
+    state.players.forEach((p, idx) => {
+      if (!players[idx]) return;
+      if (typeof p.x === "number") players[idx].x = p.x;
+      if (typeof p.y === "number") players[idx].y = p.y;
+    });
+  }
+  updatePawns();
+  updateTurnUI();
+  if (typeof canLocalAct === "function" && canLocalAct() && movesRemaining > 0) {
+    showReachable();
+  } else {
+    clearReachable();
+  }
+  applyingAuthState = false;
 }
 
 function setPlayerSelectVisible(visible) {
@@ -1106,6 +1142,9 @@ if (socket) {
       setTimeout(() => emitStateNow(true), 0);
       setTimeout(() => emitAuthBootstrap(), 0);
     }
+    if (!isHost && socket) {
+      socket.emit("auth:requestState");
+    }
   });
 
   socket.on("playerAvailability", payload => {
@@ -1138,6 +1177,7 @@ if (socket) {
 
   socket.on("auth:state", state => {
     lastAuthState = state;
+    applyAuthState(state);
   });
 
   socket.on("pickupToast", payload => {
