@@ -3405,6 +3405,7 @@ function finalizeMove(gridX, gridY) {
   currentPlayer.x = gridX;
   currentPlayer.y = gridY;
   movesRemaining = 0;
+  clearReachable();
   updatePawns();
 
   const castleKey = getCastleBaseKeyForPos(gridX, gridY) || key;
@@ -3883,6 +3884,9 @@ if (endTurnBtn) {
     }
     showPickupToast("Ход завершен.");
     endTurn(true);
+    if (typeof emitStateNow === "function") {
+      emitStateNow(true);
+    }
   });
 }
 function resetGameState() {
