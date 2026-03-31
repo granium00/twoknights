@@ -100,18 +100,47 @@ function isPlayerInfoHidden(targetIndex) {
   return dist > PLAYER_VISIBILITY_RANGE;
 }
 
-function maskPlayerPanel(panel) {
-  if (!panel) return;
-  panel.querySelectorAll('[data-stat]').forEach(node => {
-    node.textContent = "??";
+function canSeePlayerBaseStats(targetIndex) {
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null || localIndex === targetIndex) return true;
+  return !isPlayerInfoHidden(targetIndex);
+}
+
+function canSeePlayerPocket(targetIndex) {
+  return canSeePlayerBaseStats(targetIndex);
+}
+
+function canSeePlayerInventory(targetIndex) {
+  return canSeePlayerBaseStats(targetIndex);
+}
+
+function getCastleDistanceToPlayer(castleKey, player) {
+  if (!castleKey || !player) return Infinity;
+  const [cxStr, cyStr] = castleKey.split(",");
+  const cx = Number(cxStr);
+  const cy = Number(cyStr);
+  const candidates = [
+    { x: cx, y: cy },
+    { x: cx + 1, y: cy },
+    { x: cx, y: cy + 1 },
+    { x: cx + 1, y: cy + 1 }
+  ];
+  let minDist = Infinity;
+  candidates.forEach(pos => {
+    const dist = Math.abs(player.x - pos.x) + Math.abs(player.y - pos.y);
+    if (dist < minDist) minDist = dist;
   });
-  panel.querySelectorAll('[data-income]').forEach(node => {
-    node.textContent = "+?";
-  });
-  const negativeSpan = panel.querySelector('[data-stat="negative-buffs"]');
-  if (negativeSpan) negativeSpan.textContent = "Скрыто";
-  const positiveSpan = panel.querySelector('[data-stat="positive-buffs"]');
-  if (positiveSpan) positiveSpan.textContent = "Скрыто";
+  return minDist;
+}
+
+function canSeePlayerCastleStats(targetIndex) {
+  const localIndex = getLocalPlayerIndex();
+  if (localIndex === null) return false;
+  if (localIndex === targetIndex) return true;
+  const localPlayer = players[localIndex];
+  const castleKey = getFirstOwnedCastleKey(targetIndex);
+  if (!localPlayer || !castleKey) return false;
+  return getCastleDistanceToPlayer(castleKey, localPlayer) <= 6;
 }
 const pawns = players.map((player, index) => {
   const pawn = document.createElement("div");
@@ -248,7 +277,7 @@ function updateInventory(playerIndex) {
   const panel = inventoryPanels[playerIndex];
   const player = players[playerIndex];
   if (!panel || !player) return;
-  const hidden = isPlayerInfoHidden(playerIndex);
+  const hidden = !canSeePlayerInventory(playerIndex);
   panel.classList.toggle("info-hidden", hidden);
   const itemsRoot = panel.querySelector(".inventory-items");
   if (!itemsRoot) return;
@@ -291,31 +320,27 @@ function updatePlayerResources(playerIndex) {
   const player = players[playerIndex];
   const panel = playerPanels[playerIndex];
   if (!player || !panel) return;
-  const hidden = isPlayerInfoHidden(playerIndex);
-  panel.classList.toggle("info-hidden", hidden);
-  if (hidden) {
-    maskPlayerPanel(panel);
-    updateInventory(playerIndex);
-    return;
-  }
-  panel.querySelector('[data-stat="gold"]').textContent = player.resources.gold;
-  panel.querySelector('[data-stat="army"]').textContent = player.resources.army;
-  panel.querySelector('[data-stat="influence"]').textContent = player.resources.influence;
-  panel.querySelector('[data-stat="resources"]').textContent = player.resources.resources;
-  panel.querySelector('[data-stat="pocket-gold"]').textContent = player.pocket.gold;
-  panel.querySelector('[data-stat="pocket-army"]').textContent = player.pocket.army;
-  panel.querySelector('[data-stat="pocket-resources"]').textContent = player.pocket.resources;
+  const showBase = canSeePlayerBaseStats(playerIndex);
+  const showPocket = canSeePlayerPocket(playerIndex);
+  const showCastle = canSeePlayerCastleStats(playerIndex);
+  panel.classList.toggle("info-hidden", !showBase);
+  panel.querySelector('[data-stat="gold"]').textContent = showBase ? player.resources.gold : "??";
+  panel.querySelector('[data-stat="influence"]').textContent = showBase ? player.resources.influence : "??";
+  panel.querySelector('[data-stat="resources"]').textContent = showBase ? player.resources.resources : "??";
+  panel.querySelector('[data-stat="pocket-gold"]').textContent = showPocket ? player.pocket.gold : "??";
+  panel.querySelector('[data-stat="pocket-army"]').textContent = showPocket ? player.pocket.army : "??";
+  panel.querySelector('[data-stat="pocket-resources"]').textContent = showPocket ? player.pocket.resources : "??";
   const incomeSpan = panel.querySelector('[data-income="resources"]');
   if (incomeSpan) {
-    incomeSpan.textContent = `+${player.income.resources}`;
+    incomeSpan.textContent = showBase ? `+${player.income.resources}` : "+?";
   }
   const attackSpan = panel.querySelector('[data-stat="attack"]');
   if (attackSpan) {
-    attackSpan.textContent = player.attack;
+    attackSpan.textContent = showBase ? player.attack : "??";
   }
   const killsSpan = panel.querySelector('[data-stat="barbarian-kills"]');
   if (killsSpan) {
-    killsSpan.textContent = player.barbarianKills || 0;
+    killsSpan.textContent = showBase ? (player.barbarianKills || 0) : "??";
   }
   const negativeSpan = panel.querySelector('[data-stat="negative-buffs"]');
   if (negativeSpan) {
@@ -333,12 +358,16 @@ function updatePlayerResources(playerIndex) {
     if ((player.stoneBonusRollsRemaining || 0) > 0) parts.push(`Ходы подряд ${player.stoneBonusRollsRemaining}`);
     positiveSpan.textContent = parts.length ? parts.join(", ") : "нет";
   }
-  const castleKey = getFirstOwnedCastleKey(playerIndex);
-  const stats = castleKey ? ensureCastleStats(castleKey) : null;
-  const storedArmy = stats ? (stats.storageArmy || 0) : 0;
   const armySpan = panel.querySelector('[data-stat="army"]');
   if (armySpan) {
-    armySpan.textContent = String(storedArmy);
+    if (showCastle) {
+      const castleKey = getFirstOwnedCastleKey(playerIndex);
+      const stats = castleKey ? ensureCastleStats(castleKey) : null;
+      const storedArmy = stats ? (stats.storageArmy || 0) : 0;
+      armySpan.textContent = String(storedArmy);
+    } else {
+      armySpan.textContent = "??";
+    }
   }
   updateInventory(playerIndex);
 }
