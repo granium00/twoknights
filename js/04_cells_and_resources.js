@@ -240,6 +240,18 @@ const MASTER_DURATION = 6;
 let masterNextSpawnTurn = 20;
 let masterTurnsRemaining = 0;
 let masterActive = false;
+const PORTAL_FIRST_MIN_TURN = 15;
+const PORTAL_FIRST_MAX_TURN = 20;
+const PORTAL_LIFETIME_MIN = 15;
+const PORTAL_LIFETIME_MAX = 20;
+const PORTAL_RESPAWN_MIN = 15;
+const PORTAL_RESPAWN_MAX = 20;
+const portalState = {
+  active: false,
+  keys: [],
+  turnsRemaining: 0,
+  nextSpawnTurn: null
+};
 function randomIntRange(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -269,6 +281,13 @@ function initRainbowSpawns() {
   rainbowSpawnTurns.push(...Array.from(picked).sort((a, b) => a - b));
 }
 initRainbowSpawns();
+function initPortalState() {
+  portalState.active = false;
+  portalState.keys = [];
+  portalState.turnsRemaining = 0;
+  portalState.nextSpawnTurn = randomIntRange(PORTAL_FIRST_MIN_TURN, PORTAL_FIRST_MAX_TURN);
+}
+initPortalState();
 const MAGE_POSITIONS = [
   { x: 8, y: 5 },  // 09:06
   { x: 28, y: 17 } // 29:18
@@ -661,6 +680,9 @@ const BARBARIAN_START_TURN = 10;
 const BARBARIAN_RESPAWN_MIN = 10;
 const BARBARIAN_RESPAWN_MAX = 15;
 const MAX_BARBARIAN_CELLS = 3;
+function getMaxBarbarianCells() {
+  return turnCounter >= 200 ? 4 : MAX_BARBARIAN_CELLS;
+}
 let turnCounter = 0;
 let barbarianPhaseStarted = false;
 let barbarianCells = [];
@@ -686,7 +708,7 @@ function setCellToInactive(x, y, {skipTreasureCleanup = false} = {}) {
     clearTreasure();
     return;
   }
-  cell.classList.remove("resource", "important", "owned", "reachable", "barbarian", "special", "forest", "resource-disabled", "mercenary", "thief", "mage", "flower", "clover", "stone", "rainbow-stone", "master", "troll", "troll-cave", "treasure");
+  cell.classList.remove("resource", "important", "owned", "reachable", "barbarian", "special", "forest", "resource-disabled", "mercenary", "thief", "cutthroat", "mage", "portal", "flower", "clover", "stone", "rainbow-stone", "master", "troll", "troll-cave", "treasure");
   cell.classList.add("inactive");
   cell.textContent = "";
   clearCellIcon(cell);
@@ -870,7 +892,7 @@ function getAvailableBarbarianKeys() {
 }
 
 function spawnBarbarianCell() {
-  if (barbarianCells.length >= MAX_BARBARIAN_CELLS) return false;
+  if (barbarianCells.length >= getMaxBarbarianCells()) return false;
   const availableKeys = getAvailableBarbarianKeys();
   if (availableKeys.length === 0) return false;
   const pickIndex = Math.floor(Math.random() * availableKeys.length);
@@ -894,7 +916,7 @@ function spawnBarbarianCell() {
 }
 
 function spawnInitialBarbarianCells() {
-  while (barbarianCells.length < MAX_BARBARIAN_CELLS) {
+  while (barbarianCells.length < getMaxBarbarianCells()) {
     if (!spawnBarbarianCell()) break;
   }
 }
@@ -1089,6 +1111,94 @@ function clearRainbowStone(key) {
   delete rainbowByPos[key];
 }
 
+function getPortalEligibleKeys() {
+  const playerPositions = new Set(players.map(p => `${p.x},${p.y}`));
+  return Object.keys(grid).filter(key => {
+    if (nodeByPos[key]) return false;
+    if (resourceByPos[key]) return false;
+    if (specialByPos[key]) return false;
+    if (stoneByPos[key]) return false;
+    if (rainbowByPos[key]) return false;
+    if (cloverArtifact && cloverArtifact.key === key) return false;
+    if (playerPositions.has(key)) return false;
+    if (treasure && treasure.key === key) return false;
+    if (flowerArtifact && flowerArtifact.key === key) return false;
+    if (barbarianCells.some(cell => cell.key === key)) return false;
+    if (blockedCellKeys.has(key)) return false;
+    const [xStr, yStr] = key.split(",");
+    const x = Number(xStr);
+    const y = Number(yStr);
+    if (isSpawnBlocked(x, y)) return false;
+    const cell = grid[key];
+    if (!cell) return false;
+    if (!cell.classList.contains("inactive")) return false;
+    return true;
+  });
+}
+
+function spawnPortalPair() {
+  const eligibleKeys = getPortalEligibleKeys();
+  if (eligibleKeys.length < 2) return false;
+  const firstIndex = Math.floor(Math.random() * eligibleKeys.length);
+  const firstKey = eligibleKeys.splice(firstIndex, 1)[0];
+  const [fxStr, fyStr] = firstKey.split(",");
+  const fx = Number(fxStr);
+  const fy = Number(fyStr);
+  const eligibleByDistance = eligibleKeys.filter(key => {
+    const parts = key.split(",");
+    const x = Number(parts[0]);
+    const y = Number(parts[1]);
+    const dx = Math.abs(x - fx);
+    const dy = Math.abs(y - fy);
+    if (dx === 0 || dy === 0) return true;
+    return Math.hypot(dx, dy) >= 15;
+  });
+  if (eligibleByDistance.length === 0) return false;
+  const secondKey = eligibleByDistance[Math.floor(Math.random() * eligibleByDistance.length)];
+  const keys = [firstKey, secondKey];
+  keys.forEach(key => {
+    const [xStr, yStr] = key.split(",");
+    const x = Number(xStr);
+    const y = Number(yStr);
+    const success = setSpecialCell(x, y, "ПОРТАЛ", "portal", null, null, null, { type: "portal" });
+    if (!success) return;
+    const cell = grid[key];
+    if (cell) {
+      cell.textContent = "";
+      setCellIcon(cell, "portal.png", "Портал");
+    }
+  });
+  portalState.active = true;
+  portalState.keys = keys;
+  portalState.turnsRemaining = randomIntRange(PORTAL_LIFETIME_MIN, PORTAL_LIFETIME_MAX);
+  portalState.nextSpawnTurn = null;
+  return true;
+}
+
+function clearPortalPair({ scheduleRespawn = true } = {}) {
+  if (portalState.keys.length) {
+    portalState.keys.forEach(key => {
+      const [xStr, yStr] = key.split(",");
+      const x = Number(xStr);
+      const y = Number(yStr);
+      setCellToInactive(x, y);
+    });
+  }
+  portalState.active = false;
+  portalState.keys = [];
+  portalState.turnsRemaining = 0;
+  if (scheduleRespawn) {
+    portalState.nextSpawnTurn = turnCounter + randomIntRange(PORTAL_RESPAWN_MIN, PORTAL_RESPAWN_MAX);
+  }
+}
+
+function getOtherPortalKey(key) {
+  if (!portalState.active || portalState.keys.length !== 2) return null;
+  if (portalState.keys[0] === key) return portalState.keys[1];
+  if (portalState.keys[1] === key) return portalState.keys[0];
+  return null;
+}
+
 function spawnMasterCell() {
   const key = MASTER_CELL.key;
   const cell = grid[key];
@@ -1242,6 +1352,15 @@ function handleStoneSpawns() {
   }
 }
 
+function handlePortalSpawns() {
+  if (portalState.active) return;
+  if (portalState.nextSpawnTurn === null) {
+    portalState.nextSpawnTurn = randomIntRange(PORTAL_FIRST_MIN_TURN, PORTAL_FIRST_MAX_TURN);
+  }
+  if (turnCounter < portalState.nextSpawnTurn) return;
+  spawnPortalPair();
+}
+
 function handleCloverSpawns() {
   if (nextCloverSpawnTurn === null) {
     nextCloverSpawnTurn = randomIntRange(CLOVER_SPAWN_MIN, CLOVER_SPAWN_MAX);
@@ -1268,6 +1387,14 @@ function handleRainbowTimers() {
       clearRainbowStone(entry.key);
     }
   });
+}
+
+function handlePortalTimers() {
+  if (!portalState.active) return;
+  portalState.turnsRemaining -= 1;
+  if (portalState.turnsRemaining <= 0) {
+    clearPortalPair();
+  }
 }
 
 function handleMasterCell() {

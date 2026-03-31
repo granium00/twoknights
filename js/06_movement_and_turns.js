@@ -14,6 +14,11 @@ game.addEventListener("click", e => {
 
   const key = `${gridX},${gridY}`;
   const currentPlayer = players[currentPlayerIndex];
+  if (typeof tryBallistaShot === "function" && ballistaModePlayerIndex === currentPlayerIndex) {
+    if (tryBallistaShot(gridX, gridY)) {
+      return;
+    }
+  }
   if (gridX === currentPlayer.x && gridY === currentPlayer.y) {
     openContextForKey(key, currentPlayerIndex);
     return;
@@ -40,6 +45,11 @@ game.addEventListener("click", e => {
     }
     showBattleModal(battleResult);
     endTurn();
+    return;
+  }
+  const cutthroatTarget = typeof getCutthroatAtKey === "function" ? getCutthroatAtKey(key) : null;
+  if (cutthroatTarget) {
+    showPickupToast("Головорезы атакуют при соприкосновении.");
     return;
   }
   const thiefTarget = getThiefAtKey(key);

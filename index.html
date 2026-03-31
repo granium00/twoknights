@@ -313,6 +313,7 @@
       <li><button type="button" class="trade-btn" data-hire="mine"><span class="trade-main">Покупка: Атака Шахты</span><span class="trade-price"><img class="price-icon" src="assets/icons/icon-gold.png" alt="Золото" />Цена: 750 золота</span></button></li>
       <li><button type="button" class="trade-btn" data-hire="clay"><span class="trade-main">Покупка: Атака Глиняного карьера</span><span class="trade-price"><img class="price-icon" src="assets/icons/icon-gold.png" alt="Золото" />Цена: 1200 золота</span></button></li>
       <li><button type="button" class="trade-btn" data-hire="thief"><span class="trade-main">Покупка: Вор</span><span class="trade-price"><img class="price-icon" src="assets/icons/token.png" alt="Жетон" />Цена: 1 жетон</span></button></li>
+      <li><button type="button" class="trade-btn" data-hire="cutthroat"><span class="trade-main">Покупка: Головорезы</span><span class="trade-price"><img class="price-icon" src="assets/icons/icon-gold.png" alt="Золото" />Цена: 1000 золота</span></button></li>
     </ul>
     <button type="button" class="barracks-close" id="hireClose">Закрыть</button>
   </div>
@@ -530,6 +531,26 @@
       </div>
       <div class="castle-withdraw-status">
         Доступно для снятия: <span data-castle-army>0</span> войск.
+      </div>
+    </div>
+    <div class="castle-features">
+      <div class="castle-feature-row">
+        <div>
+          <strong>Баллиста</strong>
+          <div class="castle-feature-sub">1 шт.</div>
+        </div>
+        <div class="castle-feature-actions">
+          <button id="ballistaBuyBtn" class="castle-buy-btn"><span>1000</span><img class="price-icon" src="assets/icons/icon-resources.png" alt="Ресурсы" /></button>
+        </div>
+      </div>
+      <div class="castle-feature-row">
+        <div>
+          <strong>Болт</strong>
+          <div class="castle-feature-sub">Боеприпас</div>
+        </div>
+        <div class="castle-feature-actions">
+          <button id="boltBuyBtn" class="castle-buy-btn"><span>150</span><img class="price-icon" src="assets/icons/icon-resources.png" alt="Ресурсы" /></button>
+        </div>
       </div>
     </div>
     <button id="castleModalClose" class="castle-close">Закрыть</button>
