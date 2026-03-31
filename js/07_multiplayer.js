@@ -554,13 +554,18 @@ function applyState(state) {
   }
 
   // Reachable
-  const reachableList = Array.isArray(state.reachableKeys) ? state.reachableKeys.slice().sort() : [];
+  const shouldShowReachable = (state.movesRemaining ?? movesRemaining) > 0;
+  const reachableList = shouldShowReachable && Array.isArray(state.reachableKeys)
+    ? state.reachableKeys.slice().sort()
+    : [];
   const reachableFingerprint = reachableList.join("|");
   if (reachableFingerprint !== lastReachableFingerprint) {
     lastReachableFingerprint = reachableFingerprint;
     clearReachable();
     reachableKeys = new Set(reachableList);
-    showReachable();
+    if (shouldShowReachable) {
+      showReachable();
+    }
   }
 
   // UI updates
