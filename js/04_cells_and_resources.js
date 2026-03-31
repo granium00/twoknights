@@ -163,6 +163,7 @@ importantNodes.forEach(node => {
 });
 
 const RESOURCE_INTERVAL = 6;
+const RESOURCE_LIFETIME_TURNS = 6;
 const resourceTypes = [
   {key: "gold", label: "З", min: 200, max: 400},
   {key: "army", label: "В", min: 5, max: 8},
@@ -786,6 +787,21 @@ function clearAllResources() {
   Object.keys(resourceByPos).forEach(key => delete resourceByPos[key]);
 }
 
+function pruneExpiredResources(turnRef) {
+  const ref = typeof turnRef === "number" ? turnRef : (typeof turnCounter === "number" ? turnCounter : 0);
+  Object.keys(resourceByPos).forEach(key => {
+    const entry = resourceByPos[key];
+    if (!entry) return;
+    if (typeof entry.spawnedAtTurn !== "number") {
+      entry.spawnedAtTurn = ref;
+    }
+    if ((ref - entry.spawnedAtTurn) >= RESOURCE_LIFETIME_TURNS) {
+      setCellToInactive(entry.x, entry.y);
+      delete resourceByPos[key];
+    }
+  });
+}
+
 function spawnResources() {
   clearAllResources();
   const emptyKeys = [];
@@ -836,7 +852,7 @@ function spawnResources() {
     } else {
       cell.textContent = type.label;
     }
-    resourceByPos[key] = {type, x, y};
+    resourceByPos[key] = {type, x, y, spawnedAtTurn: typeof turnCounter === "number" ? turnCounter : 0};
   }
   turnsUntilResources = RESOURCE_INTERVAL;
   updateStatusPanel();
@@ -1515,4 +1531,5 @@ function handleMageCellTimers() {
     spawnMageCell(slot);
   }
 }
+
 

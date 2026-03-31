@@ -2,7 +2,6 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { Server } = require("socket.io");
-const { createAuthoritativeState, applyAuthoritativeAction } = require("./authoritative_state");
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -59,44 +58,8 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-let hostId = null;
-let latestState = null;
-let authoritativeState = createAuthoritativeState();
-let authActive = false;
+let authoritativeState = null;
 const playerAssignments = new Map();
-
-function syncAuthoritativeFromLegacy(state) {
-  if (authActive) return;
-  if (!state) return;
-  if (typeof state.currentPlayerIndex === "number") {
-    authoritativeState.currentPlayerIndex = state.currentPlayerIndex;
-  }
-  if (typeof state.turnCounter === "number") {
-    authoritativeState.turnCounter = state.turnCounter;
-  }
-  if (typeof state.movesRemaining === "number") {
-    authoritativeState.movesRemaining = state.movesRemaining;
-  }
-  if (typeof state.lastRoll !== "undefined") {
-    authoritativeState.lastRoll = state.lastRoll;
-  }
-  if (typeof state.lastDie1 !== "undefined") {
-    authoritativeState.lastDie1 = state.lastDie1;
-  }
-  if (typeof state.lastDie2 !== "undefined") {
-    authoritativeState.lastDie2 = state.lastDie2;
-  }
-  if (Array.isArray(state.players)) {
-    state.players.forEach((p, idx) => {
-      if (!authoritativeState.players[idx]) {
-        authoritativeState.players[idx] = { id: idx, x: 0, y: 0 };
-      }
-      if (typeof p.x === "number") authoritativeState.players[idx].x = p.x;
-      if (typeof p.y === "number") authoritativeState.players[idx].y = p.y;
-    });
-  }
-  authoritativeState.tick += 1;
-}
 
 function getAvailablePlayers() {
   const used = new Set(Array.from(playerAssignments.values()).filter(value => value !== null));
@@ -106,18 +69,11 @@ function getAvailablePlayers() {
   return available;
 }
 
-function getSocketIdByPlayerIndex(index) {
-  for (const [socketId, value] of playerAssignments.entries()) {
-    if (value === index) return socketId;
-  }
-  return null;
-}
-
 function broadcastRoles() {
   const availablePlayers = getAvailablePlayers();
   io.sockets.sockets.forEach(sock => {
     sock.emit("role", {
-      isHost: sock.id === hostId,
+      isHost: false,
       playerIndex: playerAssignments.get(sock.id),
       availablePlayers
     });
@@ -125,90 +81,41 @@ function broadcastRoles() {
 }
 
 io.on("connection", socket => {
-  const isHost = !hostId;
-  if (isHost) hostId = socket.id;
   playerAssignments.set(socket.id, null);
-  socket.emit("role", { isHost, playerIndex: null, availablePlayers: getAvailablePlayers() });
+  socket.emit("role", { isHost: false, playerIndex: null, availablePlayers: getAvailablePlayers() });
   io.emit("playerAvailability", { availablePlayers: getAvailablePlayers() });
 
-  if (latestState) {
-    socket.emit("stateUpdate", latestState);
-  }
   if (authoritativeState) {
     socket.emit("auth:state", authoritativeState);
   }
 
-  socket.on("clientAction", action => {
-    if (hostId) {
-      io.emit("hostAction", action);
-    }
-  });
-
-  socket.on("auth:action", action => {
-    if (!action || typeof action.type !== "string") return;
-    authActive = true;
-    const claimedPlayer = action.playerIndex;
+  socket.on("auth:sync", payload => {
+    if (!payload || !payload.state) return;
     const assignedPlayer = playerAssignments.get(socket.id);
-    if (typeof claimedPlayer === "number" && typeof assignedPlayer === "number") {
-      if (claimedPlayer !== assignedPlayer) return;
+    if (typeof payload.playerIndex === "number" && typeof assignedPlayer === "number") {
+      if (payload.playerIndex !== assignedPlayer) return;
     }
-    if (typeof claimedPlayer === "number" &&
+    if (authoritativeState &&
       typeof authoritativeState.currentPlayerIndex === "number" &&
-      claimedPlayer !== authoritativeState.currentPlayerIndex &&
-      (action.type === "roll" || action.type === "move" || action.type === "end_turn")) {
+      typeof payload.playerIndex === "number" &&
+      payload.playerIndex !== authoritativeState.currentPlayerIndex) {
       return;
     }
-    const result = applyAuthoritativeAction(authoritativeState, action);
-    authoritativeState = result.state || authoritativeState;
-    io.emit("auth:state", authoritativeState);
-    if (Array.isArray(result.events) && result.events.length) {
-      result.events.forEach(evt => io.emit("auth:event", evt));
+    if (typeof payload.state.currentPlayerIndex === "number" &&
+      typeof payload.playerIndex === "number" &&
+      authoritativeState &&
+      payload.playerIndex !== authoritativeState.currentPlayerIndex &&
+      payload.state.currentPlayerIndex !== payload.playerIndex) {
+      return;
     }
-  });
-
-  socket.on("auth:bootstrap", payload => {
-    authActive = true;
-    const result = applyAuthoritativeAction(authoritativeState, {
-      type: "bootstrap",
-      state: payload
-    });
-    authoritativeState = result.state || authoritativeState;
+    authoritativeState = payload.state;
     io.emit("auth:state", authoritativeState);
-    if (Array.isArray(result.events) && result.events.length) {
-      result.events.forEach(evt => io.emit("auth:event", evt));
-    }
   });
 
   socket.on("auth:requestState", () => {
     if (authoritativeState) {
       socket.emit("auth:state", authoritativeState);
     }
-  });
-
-  socket.on("hostAction", action => {
-    socket.broadcast.emit("hostAction", action);
-  });
-
-  socket.on("hostState", state => {
-    latestState = state;
-    socket.broadcast.emit("stateUpdate", state);
-    syncAuthoritativeFromLegacy(state);
-    io.emit("auth:state", authoritativeState);
-    if (state && typeof state.currentPlayerIndex === "number") {
-      const desiredHost = getSocketIdByPlayerIndex(state.currentPlayerIndex);
-      if (desiredHost && desiredHost !== hostId) {
-        hostId = desiredHost;
-        broadcastRoles();
-      }
-    }
-  });
-
-  socket.on("hostPatch", patch => {
-    socket.broadcast.emit("statePatch", patch);
-  });
-
-  socket.on("hostPatch", patch => {
-    socket.broadcast.emit("statePatch", patch);
   });
 
   socket.on("pickupToast", payload => {
@@ -221,21 +128,15 @@ io.on("connection", socket => {
     const taken = Array.from(playerAssignments.values()).some(value => value === index);
     if (taken) {
       socket.emit("role", {
-        isHost: socket.id === hostId,
+        isHost: false,
         playerIndex: playerAssignments.get(socket.id),
         availablePlayers: getAvailablePlayers()
       });
       return;
     }
     playerAssignments.set(socket.id, index);
-    if (!latestState && index === 0) {
-      hostId = socket.id;
-    } else if (latestState && typeof latestState.currentPlayerIndex === "number" &&
-      latestState.currentPlayerIndex === index) {
-      hostId = socket.id;
-    }
     socket.emit("role", {
-      isHost: socket.id === hostId,
+      isHost: false,
       playerIndex: index,
       availablePlayers: getAvailablePlayers()
     });
@@ -246,17 +147,8 @@ io.on("connection", socket => {
   socket.on("disconnect", () => {
     playerAssignments.delete(socket.id);
     io.emit("playerAvailability", { availablePlayers: getAvailablePlayers() });
-    if (socket.id === hostId) {
-      hostId = null;
-      const ids = Array.from(io.sockets.sockets.keys());
-      if (ids.length > 0) {
-        hostId = ids[0];
-        broadcastRoles();
-      }
-    }
   });
 });
-
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

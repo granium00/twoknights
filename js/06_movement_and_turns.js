@@ -15,10 +15,6 @@ game.addEventListener("click", e => {
   const key = `${gridX},${gridY}`;
   const currentPlayer = players[currentPlayerIndex];
   const inMultiplayer = typeof socket !== "undefined" && socket;
-  const authTurnActive = inMultiplayer &&
-    typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.currentPlayerIndex === "number";
   if (typeof tryBallistaShot === "function" && ballistaModePlayerIndex === currentPlayerIndex) {
     if (tryBallistaShot(gridX, gridY)) {
       return;
@@ -28,40 +24,14 @@ game.addEventListener("click", e => {
     openContextForKey(key, currentPlayerIndex);
     return;
   }
-  const authMovesRemaining = (typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.movesRemaining === "number")
-    ? lastAuthState.movesRemaining
-    : movesRemaining;
-  if (authMovesRemaining <= 0) {
+  if (movesRemaining <= 0) {
     return;
   }
   if (!reachableKeys.has(key)) {
-    if (inMultiplayer && authTurnActive) {
-      if (typeof emitAuthAction === "function") {
-        emitAuthAction({
-          type: "move",
-          playerIndex: currentPlayerIndex,
-          x: gridX,
-          y: gridY
-        });
-      }
-    }
     return;
   }
   const mercenaryTarget = getMercenaryAtKey(key);
   if (mercenaryTarget) {
-    if (inMultiplayer && authTurnActive) {
-      if (typeof emitAuthAction === "function") {
-        emitAuthAction({
-          type: "move",
-          playerIndex: currentPlayerIndex,
-          x: gridX,
-          y: gridY
-        });
-      }
-      return;
-    }
     if (currentPlayer.pocket.army <= 0) {
       showPickupToast("В кармане нет войск для боя.");
       return;
@@ -70,14 +40,6 @@ game.addEventListener("click", e => {
     currentPlayer.x = gridX;
     currentPlayer.y = gridY;
     updatePawns();
-    if (typeof emitAuthAction === "function") {
-      emitAuthAction({
-        type: "move",
-        playerIndex: currentPlayerIndex,
-        x: gridX,
-        y: gridY
-      });
-    }
     const battleResult = resolveMercenaryBattle(currentPlayerIndex, mercenaryTarget);
     if (battleResult && battleResult.winnerIndex === currentPlayerIndex) {
       clearMercenaryCell(mercenaryTarget.x, mercenaryTarget.y);
@@ -173,16 +135,6 @@ game.addEventListener("click", e => {
 
   if (blockedCellKeys.has(key)) return;
   if (!reachableKeys.has(key)) {
-    if (inMultiplayer && authTurnActive) {
-      if (typeof emitAuthAction === "function") {
-        emitAuthAction({
-          type: "move",
-          playerIndex: currentPlayerIndex,
-          x: gridX,
-          y: gridY
-        });
-      }
-    }
     return;
   }
 

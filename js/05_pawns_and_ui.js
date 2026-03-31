@@ -87,12 +87,7 @@ function canLocalAct() {
   if (!inMultiplayer) return true;
   const localIndex = getLocalPlayerIndex();
   if (localIndex === null) return false;
-  const authTurn = (typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.currentPlayerIndex === "number")
-    ? lastAuthState.currentPlayerIndex
-    : currentPlayerIndex;
-  return localIndex === authTurn;
+  return localIndex === currentPlayerIndex;
 }
 
 function isPlayerInfoHidden(targetIndex) {
@@ -431,7 +426,7 @@ function showPickupToast(text, options = {}) {
   const fromNetwork = Boolean(options.fromNetwork);
   const wantsBroadcast = Boolean(options.broadcast);
   if (wantsBroadcast && !fromNetwork && typeof socket !== "undefined" && socket) {
-    if (typeof isHost !== "undefined" && isHost) {
+    if (typeof canLocalAct === "function" && canLocalAct()) {
       socket.emit("pickupToast", { text });
     }
   }
@@ -2440,7 +2435,8 @@ function updateRobberModalVisibility() {
 }
 
 function processRobberAmbushChance() {
-  if (typeof socket !== "undefined" && socket && !isHost) return false;
+  if (typeof socket !== "undefined" && socket &&
+    (localPlayerIndex === null || localPlayerIndex !== currentPlayerIndex)) return false;
   if (!robbersEnabled) return false;
   if (robberAmbushThisSession) return false;
   if (robberEvent || movesRemaining > 0) return false;
@@ -3478,22 +3474,6 @@ function showReachable() {
 function finalizeMove(gridX, gridY) {
   const key = `${gridX},${gridY}`;
   const currentPlayer = players[currentPlayerIndex];
-  const inMultiplayer = typeof socket !== "undefined" && socket;
-  const authTurnActive = inMultiplayer &&
-    typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.currentPlayerIndex === "number";
-  if (inMultiplayer && authTurnActive) {
-    if (typeof emitAuthAction === "function") {
-      emitAuthAction({
-        type: "move",
-        playerIndex: currentPlayerIndex,
-        x: gridX,
-        y: gridY
-      });
-    }
-    return;
-  }
   let modalOpened = false;
     currentPlayer.x = gridX;
     currentPlayer.y = gridY;
@@ -3501,14 +3481,6 @@ function finalizeMove(gridX, gridY) {
     suppressReachableUntil = Date.now() + 450;
     clearReachable();
   updatePawns();
-  if (typeof emitAuthAction === "function") {
-    emitAuthAction({
-      type: "move",
-      playerIndex: currentPlayerIndex,
-      x: gridX,
-      y: gridY
-    });
-  }
 
   const castleKey = getCastleBaseKeyForPos(gridX, gridY) || key;
   const node = nodeByPos[castleKey];
@@ -3737,6 +3709,9 @@ function finalizeMove(gridX, gridY) {
       clearClover();
     }
   }
+  if (typeof emitAuthAction === "function") {
+    emitAuthAction();
+  }
   if (!modalOpened) {
     endTurn(true);
   } else {
@@ -3820,22 +3795,14 @@ function endTurn(force = false) {
     return;
   }
   const inMultiplayer = typeof socket !== "undefined" && socket;
-  const authTurnActive = inMultiplayer &&
-    typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.currentPlayerIndex === "number" &&
-    typeof lastAuthState.movesRemaining === "number";
-  if (inMultiplayer && authTurnActive) {
-    if (typeof emitAuthAction === "function") {
-      emitAuthAction({ type: "end_turn", playerIndex: endingPlayerIndex });
-    }
-    return;
-  }
   turnEndPending = false;
   ballistaModePlayerIndex = null;
   tickAllTimedBuffs();
   collectCastleIncomes(currentPlayerIndex);
   turnCounter += 1;
+  if (typeof pruneExpiredResources === "function") {
+    pruneExpiredResources(turnCounter);
+  }
   handleMageCellTimers();
   if (turnCounter === 150 && !worldDangerShown) {
     showWorldDangerModal();
@@ -3908,11 +3875,11 @@ function endTurn(force = false) {
   updateTurnUI();
   players.forEach((_, idx) => updatePlayerResources(idx));
   if (typeof emitAuthAction === "function") {
-    emitAuthAction({ type: "end_turn", playerIndex: endingPlayerIndex });
+    emitAuthAction();
   }
   if (!inMultiplayer) {
     scheduleAutoRoll();
-  } else if (isHost && typeof localPlayerIndex !== "undefined" &&
+  } else if (typeof localPlayerIndex !== "undefined" &&
     localPlayerIndex !== null && localPlayerIndex === currentPlayerIndex) {
     scheduleAutoRoll();
   }
@@ -3938,25 +3905,15 @@ function scheduleAutoRoll() {
 
 function tryAutoRoll() {
   const inMultiplayer = typeof socket !== "undefined" && socket;
-  if (inMultiplayer && !isHost) return;
+  if (inMultiplayer && (localPlayerIndex === null || localPlayerIndex !== currentPlayerIndex)) return;
   if (gameEnded) return;
-  const authMoves = (typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.movesRemaining === "number")
-    ? lastAuthState.movesRemaining
-    : movesRemaining;
-  if (authMoves > 0) return;
+  if (movesRemaining > 0) return;
   if (processRobberAmbushChance()) return;
   doRoll();
 }
 
 function doRoll() {
   suppressReachableUntil = 0;
-  const inMultiplayer = typeof socket !== "undefined" && socket;
-  const authTurnActive = inMultiplayer &&
-    typeof lastAuthState !== "undefined" &&
-    lastAuthState &&
-    typeof lastAuthState.currentPlayerIndex === "number";
   const die1 = testModeEnabled ? 12 : Math.floor(Math.random() * 6) + 1;
   const die2 = testModeEnabled ? 13 : Math.floor(Math.random() * 6) + 1;
   lastDie1 = die1;
@@ -3983,18 +3940,6 @@ function doRoll() {
   const roll = die1 + die2 + bonus;
   lastRoll = roll;
   lastRollText = bonus > 0 ? `${die1} + ${die2} + 1 = ${roll}` : `${die1} + ${die2} = ${roll}`;
-  if (inMultiplayer && authTurnActive) {
-    if (typeof emitAuthAction === "function") {
-      emitAuthAction({
-        type: "roll",
-        playerIndex: currentPlayerIndex,
-        roll,
-        die1,
-        die2
-      });
-    }
-    return;
-  }
   if (stoneBonusActive && currentPlayer) {
     currentPlayer.stoneBonusRollsRemaining = Math.max(0, currentPlayer.stoneBonusRollsRemaining - 1);
   }
@@ -4030,13 +3975,7 @@ function doRoll() {
   showReachable();
   updateTurnUI();
   if (typeof emitAuthAction === "function") {
-    emitAuthAction({
-      type: "roll",
-      playerIndex: currentPlayerIndex,
-      roll: effectiveMoves,
-      die1,
-      die2
-    });
+    emitAuthAction();
   }
 }
 
