@@ -64,6 +64,38 @@ let latestState = null;
 let authoritativeState = createAuthoritativeState();
 const playerAssignments = new Map();
 
+function syncAuthoritativeFromLegacy(state) {
+  if (!state) return;
+  if (typeof state.currentPlayerIndex === "number") {
+    authoritativeState.currentPlayerIndex = state.currentPlayerIndex;
+  }
+  if (typeof state.turnCounter === "number") {
+    authoritativeState.turnCounter = state.turnCounter;
+  }
+  if (typeof state.movesRemaining === "number") {
+    authoritativeState.movesRemaining = state.movesRemaining;
+  }
+  if (typeof state.lastRoll !== "undefined") {
+    authoritativeState.lastRoll = state.lastRoll;
+  }
+  if (typeof state.lastDie1 !== "undefined") {
+    authoritativeState.lastDie1 = state.lastDie1;
+  }
+  if (typeof state.lastDie2 !== "undefined") {
+    authoritativeState.lastDie2 = state.lastDie2;
+  }
+  if (Array.isArray(state.players)) {
+    state.players.forEach((p, idx) => {
+      if (!authoritativeState.players[idx]) {
+        authoritativeState.players[idx] = { id: idx, x: 0, y: 0 };
+      }
+      if (typeof p.x === "number") authoritativeState.players[idx].x = p.x;
+      if (typeof p.y === "number") authoritativeState.players[idx].y = p.y;
+    });
+  }
+  authoritativeState.tick += 1;
+}
+
 function getAvailablePlayers() {
   const used = new Set(Array.from(playerAssignments.values()).filter(value => value !== null));
   const available = [];
@@ -148,6 +180,8 @@ io.on("connection", socket => {
   socket.on("hostState", state => {
     latestState = state;
     socket.broadcast.emit("stateUpdate", state);
+    syncAuthoritativeFromLegacy(state);
+    io.emit("auth:state", authoritativeState);
     if (state && typeof state.currentPlayerIndex === "number") {
       const desiredHost = getSocketIdByPlayerIndex(state.currentPlayerIndex);
       if (desiredHost && desiredHost !== hostId) {
