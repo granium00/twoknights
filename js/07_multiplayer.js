@@ -448,20 +448,15 @@ function applyState(state) {
     treasure: state.treasure ? `${state.treasure.key || `${state.treasure.x},${state.treasure.y}`}` : "",
     flowerArtifact: state.flowerArtifact ? `${state.flowerArtifact.key || `${state.flowerArtifact.x},${state.flowerArtifact.y}`}` : "",
     cloverArtifact: state.cloverArtifact ? `${state.cloverArtifact.key || `${state.cloverArtifact.x},${state.cloverArtifact.y}`}` : "",
-    cloverTurnsRemaining: state.cloverTurnsRemaining ?? "",
-    nextCloverSpawnTurn: state.nextCloverSpawnTurn ?? "",
-    stoneByPos: normalizeEntries(state.stoneByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.turnsRemaining ?? ""}`),
-    rainbowByPos: normalizeEntries(state.rainbowByPos, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.turnsRemaining ?? ""}`),
-    portalState: state.portalState ? `${state.portalState.active ? 1 : 0}:${(state.portalState.keys || []).join("|")}:${state.portalState.turnsRemaining ?? ""}:${state.portalState.nextSpawnTurn ?? ""}` : "",
+    stoneByPos: normalizeEntries(state.stoneByPos, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+    rainbowByPos: normalizeEntries(state.rainbowByPos, entry => `${entry.key || `${entry.x},${entry.y}`}`),
+    portalState: state.portalState ? `${state.portalState.active ? 1 : 0}:${(state.portalState.keys || []).join("|")}` : "",
     masterActive: state.masterActive ? 1 : 0,
-    mageSlot: state.mageSlot ? `${state.mageSlot.active ? 1 : 0}:${state.mageSlot.key || ""}:${state.mageSlot.turnsRemaining ?? ""}` : "",
-    trollState: state.trollState ? `${state.trollState.key || ""}:${state.trollState.turnsRemaining ?? ""}:${state.trollState.moving ? 1 : 0}` : "",
+    mageSlot: state.mageSlot ? `${state.mageSlot.active ? 1 : 0}:${state.mageSlot.key || ""}` : "",
+    trollState: state.trollState ? `${state.trollState.key || ""}` : "",
     barbarianCells: normalizeEntries(state.barbarianCells, entry => `${entry.key || `${entry.x},${entry.y}`}`),
-    barbarianRespawnTimers: normalizeEntries(state.barbarianRespawnTimers, entry => `${entry.key || `${entry.x},${entry.y}`}:${entry.turnsRemaining ?? ""}`),
     mercenaries: normalizeEntries(state.mercenaries, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
-    mercenaryIdCounter: state.mercenaryIdCounter ?? "",
-    thieves: normalizeEntries(state.thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`),
-    thiefIdCounter: state.thiefIdCounter ?? ""
+    thieves: normalizeEntries(state.thieves, entry => `${entry.x},${entry.y}:${entry.id ?? ""}`)
   });
   const boardChanged = boardFingerprint !== lastBoardFingerprint;
   if (boardChanged) {
@@ -537,6 +532,22 @@ function applyState(state) {
       thieves.push(entry);
     });
     thiefIdCounter = state.thiefIdCounter ?? thiefIdCounter;
+  }
+
+  // Timers that shouldn't force board rebuild
+  if (state.portalState && typeof portalState !== "undefined" && portalState) {
+    portalState.turnsRemaining = state.portalState.turnsRemaining ?? portalState.turnsRemaining;
+    portalState.nextSpawnTurn = state.portalState.nextSpawnTurn ?? portalState.nextSpawnTurn;
+  }
+  if (state.mageSlot && typeof mageSlot !== "undefined") {
+    mageSlot.turnsRemaining = state.mageSlot.turnsRemaining ?? mageSlot.turnsRemaining;
+    mageSlot.nextSpawnTurn = state.mageSlot.nextSpawnTurn ?? mageSlot.nextSpawnTurn;
+    if (typeof updateMageTimer === "function") {
+      updateMageTimer(mageSlot);
+    }
+  }
+  if (state.trollState && typeof trollState !== "undefined") {
+    trollState.turnsRemaining = state.trollState.turnsRemaining ?? trollState.turnsRemaining;
   }
 
   // Reachable
