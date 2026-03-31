@@ -161,7 +161,7 @@ game.addEventListener("click", e => {
     } else {
       endTurn();
     }
-    showBattleModal(battleResult);
+    showBattleModal(battleResult, true);
     return;
   }
   if (barbarianTarget) {
