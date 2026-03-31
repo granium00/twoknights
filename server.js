@@ -115,6 +115,14 @@ io.on("connection", socket => {
     io.emit("auth:state", authoritativeState);
   });
 
+  socket.on("auth:bootstrap", payload => {
+    authoritativeState = applyAuthoritativeAction(authoritativeState, {
+      type: "bootstrap",
+      state: payload
+    });
+    io.emit("auth:state", authoritativeState);
+  });
+
   socket.on("auth:requestState", () => {
     if (authoritativeState) {
       socket.emit("auth:state", authoritativeState);

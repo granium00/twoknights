@@ -37,6 +37,14 @@ game.addEventListener("click", e => {
     currentPlayer.x = gridX;
     currentPlayer.y = gridY;
     updatePawns();
+    if (typeof emitAuthAction === "function") {
+      emitAuthAction({
+        type: "move",
+        playerIndex: currentPlayerIndex,
+        x: gridX,
+        y: gridY
+      });
+    }
     const battleResult = resolveMercenaryBattle(currentPlayerIndex, mercenaryTarget);
     if (battleResult && battleResult.winnerIndex === currentPlayerIndex) {
       clearMercenaryCell(mercenaryTarget.x, mercenaryTarget.y);

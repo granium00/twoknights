@@ -20,8 +20,28 @@ let lastSentState = null;
 let lastSentTurnIndex = null;
 const FULL_STATE_INTERVAL = 1000;
 let hasInitialFullBoard = false;
+let lastAuthState = null;
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
+
+function emitAuthBootstrap() {
+  if (!socket || !isHost) return;
+  const payload = {
+    currentPlayerIndex,
+    turnCounter,
+    movesRemaining,
+    lastRoll,
+    lastDie1,
+    lastDie2,
+    players: players.map(p => ({ x: p.x, y: p.y }))
+  };
+  socket.emit("auth:bootstrap", payload);
+}
+
+function emitAuthAction(action) {
+  if (!socket) return;
+  socket.emit("auth:action", action);
+}
 
 function setPlayerSelectVisible(visible) {
   if (!playerSelectModal) return;
@@ -1084,6 +1104,7 @@ if (socket) {
     }
     if (isHost) {
       setTimeout(() => emitStateNow(true), 0);
+      setTimeout(() => emitAuthBootstrap(), 0);
     }
   });
 
@@ -1113,6 +1134,10 @@ if (socket) {
     if (isHost) return;
     if (!patch || applyingRemoteState) return;
     applyPatch(patch);
+  });
+
+  socket.on("auth:state", state => {
+    lastAuthState = state;
   });
 
   socket.on("pickupToast", payload => {

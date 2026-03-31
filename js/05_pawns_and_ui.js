@@ -3477,6 +3477,14 @@ function finalizeMove(gridX, gridY) {
     suppressReachableUntil = Date.now() + 450;
     clearReachable();
   updatePawns();
+  if (typeof emitAuthAction === "function") {
+    emitAuthAction({
+      type: "move",
+      playerIndex: currentPlayerIndex,
+      x: gridX,
+      y: gridY
+    });
+  }
 
   const castleKey = getCastleBaseKeyForPos(gridX, gridY) || key;
   const node = nodeByPos[castleKey];
@@ -3781,6 +3789,7 @@ function showBallistaRange() {
 }
 
 function endTurn(force = false) {
+  const endingPlayerIndex = currentPlayerIndex;
   if (!force) {
     turnEndPending = true;
     updateTurnUI();
@@ -3862,6 +3871,9 @@ function endTurn(force = false) {
 
   updateTurnUI();
   players.forEach((_, idx) => updatePlayerResources(idx));
+  if (typeof emitAuthAction === "function") {
+    emitAuthAction({ type: "end_turn", playerIndex: endingPlayerIndex });
+  }
   const inMultiplayer = typeof socket !== "undefined" && socket;
   if (!inMultiplayer) {
     scheduleAutoRoll();
@@ -3960,6 +3972,15 @@ function doRoll() {
   movesRemaining = effectiveMoves;
   showReachable();
   updateTurnUI();
+  if (typeof emitAuthAction === "function") {
+    emitAuthAction({
+      type: "roll",
+      playerIndex: currentPlayerIndex,
+      roll: effectiveMoves,
+      die1,
+      die2
+    });
+  }
 }
 
 if (rollBtn) {
@@ -4170,6 +4191,9 @@ function resetGameState() {
   updateTurnUI();
   updateStatusPanel();
 
+  if (typeof emitAuthBootstrap === "function") {
+    emitAuthBootstrap();
+  }
   if (typeof emitStateNow === "function") {
     emitStateNow(true);
   }
