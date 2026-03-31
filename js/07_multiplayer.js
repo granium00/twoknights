@@ -15,6 +15,9 @@ let lastBoardFingerprint = "";
 let lastReachableFingerprint = "";
 let lastPlayerUiFingerprint = [];
 let lastPawnPositions = [];
+let lastFullStateAt = 0;
+let lastSentState = null;
+const FULL_STATE_INTERVAL = 5000;
 const playerSelectModal = document.getElementById("playerSelectModal");
 const playerSelectButtons = Array.from(document.querySelectorAll(".player-select-btn"));
 
@@ -52,6 +55,296 @@ function normalizeEntries(entries, keyFn) {
     .map(entry => keyFn(entry))
     .filter(Boolean)
     .sort();
+}
+
+function mapByKey(entries, keyFn) {
+  const map = new Map();
+  if (!Array.isArray(entries)) return map;
+  entries.forEach(entry => {
+    const key = keyFn(entry);
+    if (key) map.set(key, entry);
+  });
+  return map;
+}
+
+function diffMap(prevEntries, nextEntries, keyFn) {
+  const prevMap = mapByKey(prevEntries, keyFn);
+  const nextMap = mapByKey(nextEntries, keyFn);
+  const added = [];
+  const updated = [];
+  const removed = [];
+  nextMap.forEach((value, key) => {
+    if (!prevMap.has(key)) {
+      added.push(value);
+      return;
+    }
+    const prevValue = prevMap.get(key);
+    if (JSON.stringify(prevValue) !== JSON.stringify(value)) {
+      updated.push(value);
+    }
+  });
+  prevMap.forEach((_, key) => {
+    if (!nextMap.has(key)) removed.push(key);
+  });
+  return { added, updated, removed };
+}
+
+function buildPatch(prevState, nextState) {
+  const patch = { scalars: {}, players: [] };
+  const scalarKeys = [
+    "currentPlayerIndex",
+    "movesRemaining",
+    "lastRoll",
+    "lastRollText",
+    "lastDie1",
+    "lastDie2",
+    "extraTurnPending",
+    "extraTurnReason",
+    "justRolledDouble",
+    "robberAmbushThisSession",
+    "robbersEnabled",
+    "turnCounter",
+    "turnsUntilResources",
+    "turnsUntilTreasure",
+    "treasureTurnsRemaining",
+    "flowerTurnsRemaining",
+    "masterNextSpawnTurn",
+    "masterTurnsRemaining",
+    "masterActive",
+    "barbarianPhaseStarted",
+    "robberEvent",
+    "gameEnded",
+    "gameTimerSeconds",
+    "cloverTurnsRemaining",
+    "nextCloverSpawnTurn"
+  ];
+  scalarKeys.forEach(key => {
+    if (JSON.stringify(prevState[key]) !== JSON.stringify(nextState[key])) {
+      patch.scalars[key] = nextState[key];
+    }
+  });
+  if (Array.isArray(nextState.players)) {
+    nextState.players.forEach((player, idx) => {
+      const prevPlayer = prevState.players ? prevState.players[idx] : null;
+      if (!prevPlayer || JSON.stringify(prevPlayer) !== JSON.stringify(player)) {
+        patch.players.push({ index: idx, data: player });
+      }
+    });
+  }
+  patch.resources = diffMap(prevState.resourceByPos || [], nextState.resourceByPos || [],
+    entry => entry.key || `${entry.x},${entry.y}`);
+  patch.specials = diffMap(prevState.specialByPos || [], nextState.specialByPos || [],
+    entry => entry.key || `${entry.x},${entry.y}`);
+  patch.stones = diffMap(prevState.stoneByPos || [], nextState.stoneByPos || [],
+    entry => entry.key || `${entry.x},${entry.y}`);
+  patch.rainbows = diffMap(prevState.rainbowByPos || [], nextState.rainbowByPos || [],
+    entry => entry.key || `${entry.x},${entry.y}`);
+  patch.barbarians = diffMap(prevState.barbarianCells || [], nextState.barbarianCells || [],
+    entry => entry.key || `${entry.x},${entry.y}`);
+  patch.mercenaries = diffMap(prevState.mercenaries || [], nextState.mercenaries || [],
+    entry => entry.id ? `id:${entry.id}` : `${entry.x},${entry.y}`);
+  patch.thieves = diffMap(prevState.thieves || [], nextState.thieves || [],
+    entry => entry.id ? `id:${entry.id}` : `${entry.x},${entry.y}`);
+
+  patch.treasure = JSON.stringify(prevState.treasure || null) !== JSON.stringify(nextState.treasure || null)
+    ? (nextState.treasure || null) : undefined;
+  patch.flowerArtifact = JSON.stringify(prevState.flowerArtifact || null) !== JSON.stringify(nextState.flowerArtifact || null)
+    ? (nextState.flowerArtifact || null) : undefined;
+  patch.cloverArtifact = JSON.stringify(prevState.cloverArtifact || null) !== JSON.stringify(nextState.cloverArtifact || null)
+    ? (nextState.cloverArtifact || null) : undefined;
+  patch.masterActive = Boolean(prevState.masterActive) !== Boolean(nextState.masterActive)
+    ? Boolean(nextState.masterActive) : undefined;
+  patch.mageSlot = JSON.stringify(prevState.mageSlot || null) !== JSON.stringify(nextState.mageSlot || null)
+    ? (nextState.mageSlot || null) : undefined;
+  patch.portalState = JSON.stringify(prevState.portalState || null) !== JSON.stringify(nextState.portalState || null)
+    ? (nextState.portalState || null) : undefined;
+  patch.trollState = JSON.stringify(prevState.trollState || null) !== JSON.stringify(nextState.trollState || null)
+    ? (nextState.trollState || null) : undefined;
+
+  return patch;
+}
+
+function applyPatch(patch) {
+  applyingRemoteState = true;
+
+  if (patch.scalars) {
+    Object.keys(patch.scalars).forEach(key => {
+      if (typeof patch.scalars[key] !== "undefined") {
+        switch (key) {
+          case "currentPlayerIndex": currentPlayerIndex = patch.scalars[key]; break;
+          case "movesRemaining": movesRemaining = patch.scalars[key]; break;
+          case "lastRoll": lastRoll = patch.scalars[key]; break;
+          case "lastRollText": lastRollText = patch.scalars[key]; break;
+          case "lastDie1": lastDie1 = patch.scalars[key]; break;
+          case "lastDie2": lastDie2 = patch.scalars[key]; break;
+          case "extraTurnPending": extraTurnPending = patch.scalars[key]; break;
+          case "extraTurnReason": extraTurnReason = patch.scalars[key]; break;
+          case "justRolledDouble": justRolledDouble = patch.scalars[key]; break;
+          case "robberAmbushThisSession": robberAmbushThisSession = patch.scalars[key]; break;
+          case "robbersEnabled": robbersEnabled = patch.scalars[key]; break;
+          case "turnCounter": turnCounter = patch.scalars[key]; break;
+          case "turnsUntilResources": turnsUntilResources = patch.scalars[key]; break;
+          case "turnsUntilTreasure": turnsUntilTreasure = patch.scalars[key]; break;
+          case "treasureTurnsRemaining": treasureTurnsRemaining = patch.scalars[key]; break;
+          case "flowerTurnsRemaining": flowerTurnsRemaining = patch.scalars[key]; break;
+          case "masterNextSpawnTurn": masterNextSpawnTurn = patch.scalars[key]; break;
+          case "masterTurnsRemaining": masterTurnsRemaining = patch.scalars[key]; break;
+          case "masterActive": masterActive = patch.scalars[key]; break;
+          case "barbarianPhaseStarted": barbarianPhaseStarted = patch.scalars[key]; break;
+          case "robberEvent": robberEvent = patch.scalars[key]; break;
+          case "gameEnded": gameEnded = patch.scalars[key]; break;
+          case "gameTimerSeconds": gameTimerSeconds = patch.scalars[key]; break;
+          case "cloverTurnsRemaining": cloverTurnsRemaining = patch.scalars[key]; break;
+          case "nextCloverSpawnTurn": nextCloverSpawnTurn = patch.scalars[key]; break;
+          default: break;
+        }
+      }
+    });
+  }
+
+  if (Array.isArray(patch.players)) {
+    patch.players.forEach(item => {
+      if (!players[item.index]) return;
+      Object.assign(players[item.index], item.data);
+    });
+  }
+
+  if (patch.resources) {
+    patch.resources.removed.forEach(key => {
+      if (resourceByPos[key]) delete resourceByPos[key];
+      const parts = key.split(",").map(Number);
+      if (parts.length === 2) setCellToInactive(parts[0], parts[1], { skipTreasureCleanup: true });
+    });
+    [...patch.resources.added, ...patch.resources.updated].forEach(applyResourceEntry);
+  }
+
+  if (patch.specials) {
+    patch.specials.removed.forEach(key => {
+      if (specialByPos[key]) delete specialByPos[key];
+      const parts = key.split(",").map(Number);
+      if (parts.length === 2) setCellToInactive(parts[0], parts[1], { skipTreasureCleanup: true });
+    });
+    [...patch.specials.added, ...patch.specials.updated].forEach(applySpecialEntry);
+  }
+
+  if (patch.stones) {
+    patch.stones.removed.forEach(key => {
+      if (stoneByPos[key]) delete stoneByPos[key];
+      if (typeof clearStone === "function") clearStone(key);
+    });
+    [...patch.stones.added, ...patch.stones.updated].forEach(applyStone);
+  }
+
+  if (patch.rainbows) {
+    patch.rainbows.removed.forEach(key => {
+      if (rainbowByPos[key]) delete rainbowByPos[key];
+      if (typeof clearRainbowStone === "function") clearRainbowStone(key);
+    });
+    [...patch.rainbows.added, ...patch.rainbows.updated].forEach(applyRainbow);
+  }
+
+  if (typeof patch.treasure !== "undefined") {
+    if (typeof clearTreasure === "function") clearTreasure();
+    if (patch.treasure) applyTreasure(patch.treasure);
+  }
+  if (typeof patch.flowerArtifact !== "undefined") {
+    if (typeof clearFlower === "function") clearFlower();
+    if (patch.flowerArtifact) applyFlower(patch.flowerArtifact);
+  }
+  if (typeof patch.cloverArtifact !== "undefined") {
+    if (typeof clearClover === "function") clearClover();
+    if (patch.cloverArtifact) applyClover(patch.cloverArtifact);
+  }
+
+  if (typeof patch.masterActive !== "undefined") {
+    if (patch.masterActive) {
+      applyMaster();
+    } else if (typeof clearMasterCell === "function") {
+      clearMasterCell();
+    }
+  }
+  if (typeof patch.mageSlot !== "undefined") {
+    if (patch.mageSlot && patch.mageSlot.active) {
+      applyMageSlot(patch.mageSlot);
+    } else if (mageSlot && mageSlot.key) {
+      setCellToInactive(mageSlot.x, mageSlot.y, { skipTreasureCleanup: true });
+      mageSlot.active = false;
+      mageSlot.key = null;
+      mageSlot.x = null;
+      mageSlot.y = null;
+    }
+  }
+  if (typeof patch.portalState !== "undefined" && typeof portalState !== "undefined" && portalState) {
+    portalState.active = Boolean(patch.portalState?.active);
+    portalState.keys = Array.isArray(patch.portalState?.keys) ? patch.portalState.keys.slice() : [];
+  }
+  if (typeof patch.trollState !== "undefined" && typeof trollState !== "undefined") {
+    trollState = Object.assign(trollState, patch.trollState);
+    trollState.prevKey = null;
+    updateTrollVisual();
+  }
+
+  if (patch.barbarians) {
+    patch.barbarians.removed.forEach(key => {
+      const parts = key.split(",").map(Number);
+      if (parts.length === 2) setCellToInactive(parts[0], parts[1], { skipTreasureCleanup: true });
+      const idx = barbarianCells.findIndex(entry => (entry.key || `${entry.x},${entry.y}`) === key);
+      if (idx >= 0) barbarianCells.splice(idx, 1);
+    });
+    [...patch.barbarians.added, ...patch.barbarians.updated].forEach(entry => {
+      applyBarbarianCell(entry);
+      const key = entry.key || `${entry.x},${entry.y}`;
+      const idx = barbarianCells.findIndex(item => (item.key || `${item.x},${item.y}`) === key);
+      if (idx >= 0) barbarianCells[idx] = entry;
+      else barbarianCells.push(entry);
+    });
+  }
+
+  if (patch.mercenaries) {
+    patch.mercenaries.removed.forEach(idKey => {
+      const entryIdx = mercenaries.findIndex(entry => (entry.id ? `id:${entry.id}` : `${entry.x},${entry.y}`) === idKey);
+      if (entryIdx >= 0) {
+        clearMercenaryCell(mercenaries[entryIdx].x, mercenaries[entryIdx].y);
+        mercenaries.splice(entryIdx, 1);
+      }
+    });
+    [...patch.mercenaries.added, ...patch.mercenaries.updated].forEach(entry => {
+      applyMercenary(entry);
+      const key = entry.id ? `id:${entry.id}` : `${entry.x},${entry.y}`;
+      const idx = mercenaries.findIndex(item => (item.id ? `id:${item.id}` : `${item.x},${item.y}`) === key);
+      if (idx >= 0) mercenaries[idx] = entry;
+      else mercenaries.push(entry);
+    });
+  }
+
+  if (patch.thieves) {
+    patch.thieves.removed.forEach(idKey => {
+      const entryIdx = thieves.findIndex(entry => (entry.id ? `id:${entry.id}` : `${entry.x},${entry.y}`) === idKey);
+      if (entryIdx >= 0) {
+        clearThiefCell(thieves[entryIdx].x, thieves[entryIdx].y);
+        thieves.splice(entryIdx, 1);
+      }
+    });
+    [...patch.thieves.added, ...patch.thieves.updated].forEach(entry => {
+      applyThief(entry);
+      const key = entry.id ? `id:${entry.id}` : `${entry.x},${entry.y}`;
+      const idx = thieves.findIndex(item => (item.id ? `id:${item.id}` : `${item.x},${item.y}`) === key);
+      if (idx >= 0) thieves[idx] = entry;
+      else thieves.push(entry);
+    });
+  }
+
+  updatePawns();
+  players.forEach((_, idx) => updatePlayerResources(idx));
+  updateTurnUI();
+  updateStatusPanel();
+  if (typeof canLocalAct === "function" && canLocalAct() && movesRemaining > 0) {
+    showReachable();
+  } else {
+    clearReachable();
+  }
+
+  applyingRemoteState = false;
 }
 
 function buildState() {
@@ -193,7 +486,16 @@ function emitStateNow(force = false) {
   if (!force && fingerprint === lastStateFingerprint) return;
   lastStateFingerprint = fingerprint;
   lastEmitAt = now;
-  socket.emit("hostState", state);
+  const shouldSendFull = force || !lastSentState || (now - lastFullStateAt > FULL_STATE_INTERVAL);
+  if (shouldSendFull) {
+    lastFullStateAt = now;
+    lastSentState = shallowClone(state);
+    socket.emit("hostState", state);
+    return;
+  }
+  const patch = buildPatch(lastSentState, state);
+  lastSentState = shallowClone(state);
+  socket.emit("hostPatch", patch);
 }
 
 function resetDynamicCells() {
@@ -771,6 +1073,12 @@ if (socket) {
     if (isHost) return;
     if (!state || applyingRemoteState) return;
     queueStateApply(state);
+  });
+
+  socket.on("statePatch", patch => {
+    if (isHost) return;
+    if (!patch || applyingRemoteState) return;
+    applyPatch(patch);
   });
 
   socket.on("pickupToast", payload => {

@@ -121,6 +121,14 @@ io.on("connection", socket => {
     }
   });
 
+  socket.on("hostPatch", patch => {
+    socket.broadcast.emit("statePatch", patch);
+  });
+
+  socket.on("hostPatch", patch => {
+    socket.broadcast.emit("statePatch", patch);
+  });
+
   socket.on("pickupToast", payload => {
     if (!payload || typeof payload.text !== "string") return;
     io.emit("pickupToast", { text: payload.text, senderId: socket.id });
